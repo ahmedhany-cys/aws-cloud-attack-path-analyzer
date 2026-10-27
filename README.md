@@ -4,9 +4,10 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11%20%7C%203.12%20%7C%203.13%20%7C%203.14-blue.svg)](pyproject.toml)
 
-Offline, graph-based analysis of AWS IAM permission relationships. Given a snapshot of an
-account's identities, policies, buckets and functions, the analyzer works out **which identities
-could reach administrative control or sensitive data, through which trust relationships, with
+Offline, graph-based analysis of AWS permission and exposure relationships. Given a snapshot of
+an account's identities, policies, buckets, functions, instances and security groups, the
+analyzer works out **which identities — or which internet-exposed hosts — could reach
+administrative control or sensitive data, through which trust and network relationships, with
 what evidence**, and what least-privilege change would close each path. It runs entirely offline
 on synthetic or exported configuration, and optionally collects a snapshot from a real account
 through a read-only, opt-in adapter.
@@ -14,6 +15,11 @@ through a read-only, opt-in adapter.
 Every finding states whether it is an *observed* configuration fact, an *inference* from several
 facts, a *hypothesis* that depends on another account, or something the evaluator *could not
 decide*. Scores are prioritization heuristics and the reports say so.
+
+![Terminal recording: version, the scenario self-check, analysis of the synthetic sample with its findings summary, the critical findings in Markdown, and policy-only mode](docs/images/demo.gif)
+
+*Recorded with asciinema from the real commands in [scripts/demo.sh](scripts/demo.sh)
+(`make demo`); the source cast is [docs/images/demo.cast](docs/images/demo.cast).*
 
 ---
 
@@ -63,13 +69,18 @@ about what the configuration proves.
   26 condition operators with `IfExists` and set operators, policy variables. Anything that
   depends on request-time context is reported as **indeterminate**, never guessed.
 * **Permission-relationship graph.** Observed structure (membership, attachments, trust, Lambda
-  execution roles) plus evaluator-backed `can-assume` and `can-access` edges, each carrying the
-  statements that justify it. Bounded reachability search to administrative principals and
-  sensitive buckets.
-* **Twenty checks** covering administrative access, wildcard grants, anonymous and cross-account
-  trust, broad `sts:AssumeRole` and `iam:PassRole`, IAM/credential/Lambda write permissions,
-  public and cross-account exposure (with Block Public Access handling), sensitive-data access,
-  multi-hop paths, evaluation limitations and inventory coverage.
+  execution roles, EC2 instance roles) plus evaluator-backed `can-assume` and `can-access` edges,
+  each carrying the statements that justify it. Bounded reachability search to administrative
+  principals and sensitive buckets.
+* **Network reachability and multi-service paths.** Security-group ingress, public addresses and
+  (when known) internet-gateway routing decide which running instances the internet can reach;
+  those hosts' instance-profile roles join the graph, so *internet → exposed host → role →
+  sensitive bucket* is found as a path with explicit preconditions and a `hypothetical` label.
+* **Twenty-two checks** covering administrative access, wildcard grants, anonymous and
+  cross-account trust, broad `sts:AssumeRole` and `iam:PassRole`, IAM/credential/Lambda write
+  permissions, public and cross-account exposure (with Block Public Access handling), internet
+  exposure of instances and IMDSv1, sensitive-data access, multi-hop paths, evaluation limitations
+  and inventory coverage.
 * **Findings you can audit.** Id, severity, score with full breakdown, confidence, evidence kind,
   affected principal and resource, the exact policy statements, preconditions, impact,
   least-privilege remediation with a template policy, read-only verification commands and AWS
@@ -77,85 +88,77 @@ about what the configuration proves.
 * **Transparent scoring** from a TOML model you can replace (`--scoring-config`).
 * **Three report formats**: JSON, Markdown with Mermaid path diagrams, and standalone HTML with
   a strict Content-Security-Policy. Plus an optional local Streamlit dashboard.
-* **Read-only AWS adapter** (opt-in): collects IAM, S3 and Lambda configuration through a botocore
-  allow list that rejects any non-read-only operation, handles pagination, throttling and
+* **Read-only AWS adapter** (opt-in): collects IAM, S3, Lambda and EC2 configuration through a
+  botocore allow list that rejects any non-read-only operation, handles pagination, throttling and
   access-denied responses, and records what it could not see as coverage gaps.
-* **Built-in self-check**: `python -m attackpath validate` replays eleven synthetic scenarios
+* **Built-in self-check**: `python -m attackpath validate` replays twelve synthetic scenarios
   against recorded expectations, the same mechanism the regression suite uses.
+* **Independently specified IAM regression corpus**: 41 authorization questions whose expected
+  answers come from cited AWS documentation pages, replayed by the test suite. Its first run
+  found three evaluator deviations, all fixed; an opt-in script can compare the same cases with
+  the IAM policy simulator ([docs/iam-regression-cases.md](docs/iam-regression-cases.md)).
 
 ## Architecture
 
-```mermaid
-flowchart LR
-    subgraph Inputs
-        F[Snapshot JSON\nfixture or export]
-        P[IAM policy documents]
-        A[(AWS account)]
-    end
-    C[aws/ collector\nread-only allow list] -. opt-in .-> F
-    A -. GetAccountAuthorizationDetails\nbucket + function config .-> C
-    F --> L[parser/\nstrict validation, limits]
-    P --> L
-    L --> M[models/\nEnvironment]
-    M --> E[iam/ evaluator\nallow · deny · indeterminate]
-    E --> G[graph/ builder\ntyped edges with evidence]
-    G --> S[graph/ paths\nbounded search]
-    E --> K[analysis/ checks]
-    G --> K
-    S --> K
-    K --> R[scoring/\nTOML model]
-    R --> O[reporting/\nJSON · Markdown · HTML]
-    O --> CLI[cli]
-    O --> D[dashboard/\nStreamlit, optional]
-```
+![Architecture of the AWS Cloud Attack Path Analyzer: inputs, the offline analysis pipeline, and outputs](docs/images/architecture.svg)
 
 Each layer is a separate package with one responsibility; data flows one way and nothing
-downstream of the parser can reach AWS. The full description is in
-[docs/architecture.md](docs/architecture.md).
+downstream of the parser can reach AWS. The full description, with a Mermaid version of the
+diagram and the package table, is in [docs/architecture.md](docs/architecture.md).
 
 **Why these components.** Python because the audience (security engineers) reads and extends it;
 the standard library alone for the core because a tool that reads security configuration should
 carry the smallest possible supply chain; `boto3` only behind an extra and only for read-only
 calls; `GetAccountAuthorizationDetails` because it returns users, groups, roles and policy
 documents in one paginated call instead of hundreds; S3 and Lambda because bucket policies,
-Block Public Access and execution roles are where identity meets data and code; Streamlit because
+Block Public Access and execution roles are where identity meets data and code; EC2 security
+groups, public addresses and instance profiles because they are where the network meets identity;
+Streamlit because
 a local dashboard should not require a web stack; a purpose-built graph because the analyzer needs
 typed, evidence-carrying edges, deterministic ordering and hard limits rather than a general
 graph library.
 
 ## How the permission graph works
 
-Nodes are accounts, users, groups, roles, managed policies, buckets, functions, external accounts
-and principals, the anonymous caller, and AWS services. Edges are typed:
+Nodes are accounts, users, groups, roles, managed policies, buckets, functions, EC2 instances,
+external accounts and principals, the anonymous caller, the internet, and AWS services. Edges are
+typed:
 
 | Edge | Meaning | How it is established |
 |---|---|---|
-| `member-of`, `has-policy`, `executes-as` | observed structure | read from the snapshot |
+| `member-of`, `has-policy`, `executes-as`, `runs-as` | observed structure (the last two: a function's execution role, a running instance's instance-profile role) | read from the snapshot |
 | `trusts` | a trust policy names this principal (classified as same-account, cross-account, anonymous, service, federated) | trust-policy parsing |
 | `can-assume` | the caller can obtain the role | evaluator: trust policy *and*, where AWS requires it, the caller's own `sts:AssumeRole` permission; anonymous and external callers become hypotheses with stated preconditions |
 | `can-access` | the identity can read / list / write / delete / re-policy the bucket | evaluator over identity policy + boundary + bucket policy + Block Public Access, one decision per access class |
+| `network-exposed` | the internet can reach the instance's open ports | security-group ingress from `0.0.0.0/0` or `::/0`, a public address, a running state and (when the snapshot says) an internet-gateway route; always `hypothetical`, with the precondition that a listening service be exploitable |
 
-Path search starts at every user, role, function, external account and anonymous node, walks
-`can-assume` and `executes-as` edges, and stops at an administrative principal or at a sensitive
-bucket reached through a final `can-access` edge. Depth, per-pair and total path counts are
-capped and truncation is reported. The primary path for a source/target pair is the shortest,
-then the one with the strongest evidence.
+Path search starts at every user, role, function, instance, external account, anonymous and
+internet node, walks `can-assume`, `executes-as`, `runs-as` and `network-exposed` edges, and stops
+at an administrative principal or at a sensitive bucket reached through a final `can-access` edge.
+Depth, per-pair and total path counts are capped and truncation is reported. The primary path for
+a source/target pair is the shortest, then the one with the strongest evidence. A path that enters
+through the network is a *multi-service* path (EC2 → IAM → S3) and is capped at `high` because
+its first hop is an assumption; the exposure itself (`EC2-PUBLIC-EXPOSURE`) is an observed fact
+scored on its own.
 
 Two design decisions keep reports readable. Access that exists only because a bucket policy grants
 to everyone is reported once as a public-exposure finding, not once per principal. And permissions
 that would let an identity change configuration (`iam:PassRole`, policy writes, credential
 creation, function code updates) are reported as configuration findings with concrete
 least-privilege fixes rather than being chained into speculative multi-step scenarios; see the
-scope decision in [docs/methodology.md](docs/methodology.md).
+scope decision in [docs/methodology.md](docs/methodology.md). The network model is deliberately
+small (security groups, public addresses, route tables; no NACLs, load balancers or host
+firewalls) and is described there as well.
 
 ## A synthetic example
 
-`fixtures/sample_environment.json` is a fictional account (`111111111111`) with five users, nine
-roles, eight buckets and four functions that mixes insecure and secure configuration. Running the
-analyzer on it produces 43 findings; the top of the list:
+`fixtures/sample_environment.json` is a fictional account (`111111111111`) with five users, ten
+roles, eight buckets, four functions, four instances and three security groups that mixes insecure
+and secure configuration. Running the analyzer on it produces 49 findings; a selection:
 
 | Severity | Check | Finding |
 |---|---|---|
+| critical | `EC2-PUBLIC-EXPOSURE` | Instance `legacy-jump` has a public address and a security group open on every port to `0.0.0.0/0`; it runs as a role that reads the PII bucket and still accepts IMDSv1 |
 | critical | `PATH-ADMIN` | User `legacy-automation` (2022 access key, no MFA) can reach role `ops-admin-legacy` in 1 step: it may `sts:AssumeRole` on `*` and the role trusts the whole account |
 | critical | `TRUST-ANONYMOUS` | Role `vendor-support-access` can be assumed by any AWS principal (`Principal: "*"`, no condition) and holds `AmazonS3FullAccess` |
 | critical | `ADMIN` | Role `ops-admin-legacy` has administrative permissions (`Action: *` on `Resource: *`) |
@@ -165,13 +168,17 @@ analyzer on it produces 43 findings; the top of the list:
 | high | `SENSITIVE-ACCESS` | Workload role `lambda-image-resizer` can read/write/delete sensitive bucket `customer-pii-exports` |
 | high | `PATH-SENSITIVE` | Any AWS principal can reach bucket `customer-pii-exports` in 2 steps via `vendor-support-access` |
 | high | `S3-PUBLIC-POLICY` | Bucket `legacy-backups` is publicly readable through its bucket policy |
+| high | `EC2-PUBLIC-EXPOSURE` | Instance `web-1` exposes SSH next to its web ports; its role only reads the public marketing bucket, which is why it scores below the jump host |
+| high | `EC2-IMDSV1` | Instance `legacy-jump` allows IMDSv1 while holding a role with PII access: one SSRF away from the credentials |
+| medium | `PATH-SENSITIVE` | **The internet** can reach bucket `customer-pii-exports` in 3 steps: `network-exposed` → `legacy-jump` → `runs-as` → `ec2-jump-host-legacy` → `can-access`; a multi-service path, hypothetical because the first hop assumes a compromise of the host |
 | low | `S3-PUBLIC-POLICY` | Bucket `archive-with-restricted-policy` has a public statement that `RestrictPublicBuckets` makes inert |
 | informational | `SENSITIVE-ACCESS` | Role `finance-reporting` can read the PII bucket **only if** `aws:SourceVpce` matches: indeterminate, low confidence |
 
 What is *not* reported matters as much: user `analyst-readonly` inherits `s3:GetObject` on `*`
 from a group but carries an explicit `Deny` for the PII bucket, so no access finding exists for
 that pair; role `lambda-thumbnailer-least-priv`, scoped to its two low-sensitivity buckets,
-produces nothing above informational. The complete reports are in
+produces nothing above informational; instance `batch-worker` (private subnet, no public address,
+IMDSv2 required) produces no network finding at all. The complete reports are in
 [reports/sample/](reports/sample/) (labelled as synthetic) and every scenario is walked through
 in [docs/incident-scenarios.md](docs/incident-scenarios.md).
 
@@ -192,7 +199,8 @@ Console output of the first command (the three report files are written to `repo
 
 ```text
 environment: synthetic-demo-account (synthetic, account 111111111111)
-findings: critical=3, high=20, medium=10, low=6, informational=4
+findings: critical=4, high=22, medium=11, low=8, informational=4
+  [CRITICAL     ] APA-EC2-PUBLIC-EXPOSURE-6ab2178c  Instance legacy-jump is reachable from the internet on all ports
   [CRITICAL     ] APA-PATH-ADMIN-3c421bec  User legacy-automation can reach role ops-admin-legacy in 1 step(s)
   [CRITICAL     ] APA-TRUST-ANONYMOUS-ee839b9d  Role vendor-support-access can be assumed by any AWS principal
   [CRITICAL     ] APA-ADMIN-50535443  Role ops-admin-legacy has administrative permissions
@@ -200,13 +208,18 @@ findings: critical=3, high=20, medium=10, low=6, informational=4
   [HIGH         ] APA-ADMIN-5133d772  User break-glass-admin has administrative permissions
   [HIGH         ] APA-PASSROLE-BROAD-51c8c2a1  User ci-deployer may pass any role to AWS services
   [HIGH         ] APA-LAMBDA-PUBLIC-INVOKE-bcd469ea  Function public-webhook can be invoked by anyone
-  [HIGH         ] APA-LAMBDA-WRITE-0f217123  User ci-deployer may change the code or configuration of any Lambda function
-  ... 35 more
+  ... 41 more
 limitations/warnings: 1 (see report)
 wrote reports/attackpath-report.json
 wrote reports/attackpath-report.md
 wrote reports/attackpath-report.html
 ```
+
+The HTML report rendered by a local browser (synthetic data; full file in
+[reports/sample/attackpath-report.html](reports/sample/attackpath-report.html), Markdown twin in
+[reports/sample/attackpath-report.md](reports/sample/attackpath-report.md)):
+
+![Top of the HTML report: synthetic-environment notice, summary table, findings by severity and by category](docs/images/report-html.png)
 
 Useful options: `--min-severity high` to drop noise, `--fail-on high` for a non-zero exit status in
 pipelines (exit code 3), `--check PATH-ADMIN` to run one check, `--max-depth 6` for deeper path
@@ -249,7 +262,8 @@ Nothing in offline mode opens a network connection; `boto3` is not even imported
 
 ## Optional AWS setup
 
-`aws-scan` collects a snapshot from an account you administer, using an AWS CLI profile you
+`aws-scan` collects a snapshot (IAM, S3, Lambda and EC2 instances, security groups and route
+tables, one region per run) from an account you administer, using an AWS CLI profile you
 select. It is read-only by construction: a botocore handler rejects any API operation outside
 the documented allow list before the request is built, root credentials are refused, `--confirm`
 is required, and nothing is uploaded anywhere. The least-privilege IAM policy for the scan
@@ -284,10 +298,12 @@ Details and consequences: [docs/methodology.md](docs/methodology.md) and
 
 ## Threat model
 
-The analyzer considers four starting points, each with its own exposure weight: compromised
+The analyzer considers five starting points, each with its own exposure weight: compromised
 credentials of an IAM user (raised by long-lived keys and console access without MFA), a
-compromised workload acting as its execution role, another AWS account named in a trust or bucket
-policy, and an anonymous caller admitted by `Principal: "*"`. Assets are administrative control,
+compromised workload acting as its execution or instance role, another AWS account named in a
+trust or bucket policy, an anonymous caller admitted by `Principal: "*"`, and an attacker on the
+internet who compromises a service on an exposed instance (always a stated hypothesis, never an
+assumed success). Assets are administrative control,
 buckets declared sensitive, workload integrity and the identity configuration itself. The model of
 the tool itself (malicious snapshots, compromised dependencies, misconfigured CI, careless
 operators) and the mitigations for each are in [docs/threat-model.md](docs/threat-model.md).
@@ -316,24 +332,27 @@ python -m attackpath validate --verbose
 ```
 
 The suite covers policy parsing, allow/deny behaviour, wildcards, action and resource matching,
-conditions, trust relationships, graph construction, path discovery and de-duplication, scoring,
-serialization, all three report formats, invalid input, missing fields, unsupported constructs,
-unknown conditions, partial inventory, AWS pagination/throttling/access-denied handling with
-stubbed clients, CLI argument validation, safe defaults, property-based tests (Hypothesis) and a
-regression test for every defect fixed during development.
+conditions, trust relationships, graph construction, path discovery and de-duplication, network
+exposure (security-group parsing, exposure edges, the EC2 checks, internet-sourced paths),
+scoring, serialization, all three report formats, invalid input, missing fields, unsupported
+constructs, unknown conditions, partial inventory, AWS pagination/throttling/access-denied
+handling with stubbed clients (IAM, S3, Lambda and EC2), CLI argument validation, safe defaults,
+property-based tests (Hypothesis), the documentation-sourced IAM corpus and a regression test for
+every defect fixed during development.
 
-Results of the full local run that preceded publication (macOS, Apple M2, Python 3.14.7):
+Results of the full local run that preceded the latest push (macOS, Apple M2, Python 3.14.7):
 
 | Gate | Result |
 |---|---|
-| `pytest` | **248 passed, 0 failed, 0 skipped** (unit, integration, regression, property-based, stubbed AWS adapter, dashboard AppTest) |
-| coverage | 94 % of 4 635 statements |
+| `pytest` | **402 passed, 0 failed, 0 skipped** (unit, integration, regression including the 41-case IAM corpus, property-based, stubbed AWS adapter, dashboard AppTest) |
+| coverage | 94 % of 5 089 statements |
 | `ruff check` / `ruff format --check` | clean |
-| `mypy --strict` | clean, 52 source files |
+| `mypy --strict` | clean, 53 source files |
 | `bandit` | 0 issues |
 | `pip-audit` | no known vulnerabilities |
 | `detect-secrets` (tracked files) | no findings against the committed baseline |
-| `attackpath validate` | 11 scenarios, 37 expectations met, 0 failed |
+| `attackpath validate` | 12 scenarios, 45 expectations met, 0 failed |
+| IAM regression corpus | 41 cases with documentation-sourced expectations, 41 agree with the evaluator (3 did not on the first run; the evaluator was corrected, not the cases) |
 | wheel build + install in a clean virtualenv | `attackpath validate` passes with zero third-party packages installed |
 
 CI repeats the same gates on Python 3.11, 3.12, 3.13 and 3.14 (badge above). The test suite
@@ -346,7 +365,8 @@ Lambda coverage and an analysis run without errors. The second run exposed a cos
 the titles of `EVAL-INDETERMINATE` findings, fixed in the unreleased version (see the changelog).
 Results of real-account scans are not published. The inline policy was attached to that user for
 the runs and removed afterwards, as described under *Teardown* in the setup guide; no other AWS
-resource was created or modified.
+resource was created or modified. The EC2 part of the inventory, added after those runs, and the
+policy-simulator replay script have been exercised against stubbed responses only.
 
 ## Performance
 
@@ -356,8 +376,8 @@ synthetic environments; median of three runs; macOS, Apple M2, 8 GiB, Python 3.1
 | Principals | Buckets | Graph edges | Paths | Findings | Median time |
 |---:|---:|---:|---:|---:|---:|
 | 100 | 10 | 354 | 185 | 135 | 0.08 s |
-| 500 | 50 | 8 765 | 4 372 | 2 480 | 2.0 s |
-| 2 000 | 200 | 116 228 | 10 000 (cap reached) | 21 657 | 30.3 s |
+| 500 | 50 | 8 765 | 4 372 | 2 480 | 2.1 s |
+| 2 000 | 200 | 116 228 | 10 000 (cap reached) | 21 657 | 32.7 s |
 
 The generator deliberately over-grants (a tenth of all roles get `s3:*`), which is why finding
 counts grow so fast; the sample environment with 14 principals analyzes in a fraction of a second.
@@ -368,11 +388,14 @@ reports readable. Path enumeration stops at the configured cap and says so in th
 ## Known limitations
 
 The analyzer reasons about one account's static snapshot with a conservative evaluator: SCPs,
-session policies and VPC endpoint policies are not modelled; only IAM, S3 and Lambda are
-inventoried; sensitivity is declared, not inferred; request-time conditions become preconditions
-rather than decisions; path search is bounded; scores are heuristics; and configuration-changing
-permissions are reported as grants rather than chained into speculative scenarios. Each point and
-its consequence is listed in [docs/limitations.md](docs/limitations.md).
+session policies and VPC endpoint policies are not modelled; only IAM, S3, Lambda and EC2
+(instances, security groups, route tables) are inventoried; the network model knows nothing about
+network ACLs, load balancers, peering or what actually listens on a port, so an open port is
+exposure, not a confirmed vulnerability; sensitivity is declared, not inferred; request-time
+conditions become preconditions rather than decisions; path search is bounded; scores are
+heuristics; and configuration-changing permissions are reported as grants rather than chained into
+speculative scenarios. Each point and its consequence is listed in
+[docs/limitations.md](docs/limitations.md).
 
 ## Cost considerations
 

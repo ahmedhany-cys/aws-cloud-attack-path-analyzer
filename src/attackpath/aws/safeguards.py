@@ -49,6 +49,13 @@ REQUIRED_IAM_ACTIONS: Mapping[str, Mapping[str, str]] = MappingProxyType(
                 "ListTags": "lambda:ListTags",
             }
         ),
+        "ec2": MappingProxyType(
+            {
+                "DescribeInstances": "ec2:DescribeInstances",
+                "DescribeSecurityGroups": "ec2:DescribeSecurityGroups",
+                "DescribeRouteTables": "ec2:DescribeRouteTables",
+            }
+        ),
         "sts": MappingProxyType({"GetCallerIdentity": "sts:GetCallerIdentity"}),
     }
 )

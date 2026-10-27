@@ -1,0 +1,245 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1160" height="828" viewBox="0 0 1160 828" role="img"
+     aria-labelledby="t d">
+  <title id="t">AWS Cloud Attack Path Analyzer: architecture and data flow</title>
+  <desc id="d">Inputs (snapshot JSON, IAM policy documents, scenario fixtures, and an optional read-only AWS adapter) feed an offline core with zero third-party dependencies: loader and parser, environment model, tri-state IAM evaluator, graph builder, bounded path search, checks, scoring, and the findings and report model. Outputs are JSON, Markdown and HTML reports, the CLI, a scenario self-check, and an optional Streamlit dashboard.</desc>
+  <style>
+    text { font-family: -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; fill: #1f2937; }
+    .title { font-size: 22px; font-weight: 600; }
+    .sub { font-size: 14px; fill: #475569; }
+    .colhead { font-size: 13px; font-weight: 600; fill: #64748b; letter-spacing: 1.2px; }
+    .gtitle { font-size: 16px; font-weight: 700; fill: #1e3a8a; }
+    .gsub { font-size: 13px; fill: #475569; }
+    .label { font-size: 14.5px; font-weight: 600; fill: #16365c; }
+    .btitle { font-size: 15px; font-weight: 600; }
+    .small { font-size: 13px; fill: #334155; }
+    .muted { fill: #64748b; }
+    .chain { font-size: 13px; fill: #64748b; }
+    .legend { font-size: 13px; fill: #334155; }
+    .amber { fill: #7c2d12; }
+    .optlabel { font-size: 13px; font-weight: 700; fill: #92400e; }
+    .green { fill: #14532d; }
+    .bg { fill: #f8fafc; stroke: #d5dce6; stroke-width: 1.5; }
+    .card { fill: #ffffff; stroke: #d5dce6; stroke-width: 1.5; }
+    .input { fill: #f1f5f9; stroke: #64748b; stroke-width: 1.5; }
+    .core-group { fill: #eef3fa; stroke: #9fb8d6; stroke-width: 1.5; }
+    .core { fill: #dbe7f6; stroke: #2d6cb3; stroke-width: 1.5; }
+    .opt-group { fill: #fffbeb; stroke: #d97706; stroke-width: 1.5; stroke-dasharray: 6 4; }
+    .opt { fill: #fef3c7; stroke: #d97706; stroke-width: 1.5; }
+    .opt-dashed { fill: #fef3c7; stroke: #d97706; stroke-width: 1.5; stroke-dasharray: 6 4; }
+    .out { fill: #dcfce7; stroke: #15803d; stroke-width: 1.5; }
+    .flow { fill: none; stroke: #475569; stroke-width: 1.5; }
+    .flow-opt { fill: none; stroke: #d97706; stroke-width: 1.5; stroke-dasharray: 5 4; }
+    .rail { fill: none; stroke: #64748b; stroke-width: 1.5; }
+    .divider { stroke: #cbd5e1; stroke-width: 1; }
+    .dot { fill: #475569; }
+    .edge-observed { fill: none; stroke: #64748b; stroke-width: 1.5; }
+    .edge-evaluated { fill: none; stroke: #2d6cb3; stroke-width: 2.5; }
+    .edge-exposure { fill: none; stroke: #d97706; stroke-width: 1.5; stroke-dasharray: 2 3; }
+  </style>
+  <defs>
+    <marker id="arrow" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto" markerUnits="userSpaceOnUse">
+      <path d="M0,0.5 L8,4.5 L0,8.5 z" fill="#475569"/>
+    </marker>
+    <marker id="arrow-amber" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto" markerUnits="userSpaceOnUse">
+      <path d="M0,0.5 L8,4.5 L0,8.5 z" fill="#d97706"/>
+    </marker>
+    <marker id="arrow-blue" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto" markerUnits="userSpaceOnUse">
+      <path d="M0,0.5 L8,4.5 L0,8.5 z" fill="#2d6cb3"/>
+    </marker>
+    <marker id="arrow-rail" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto" markerUnits="userSpaceOnUse">
+      <path d="M0,0.5 L8,4.5 L0,8.5 z" fill="#64748b"/>
+    </marker>
+  </defs>
+  <!-- background -->
+  <rect x="0.75" y="0.75" width="1158.5" height="826.5" rx="14" class="bg"/>
+
+  <!-- title -->
+  <text x="28" y="42" class="title">AWS Cloud Attack Path Analyzer — architecture and data flow</text>
+  <text x="28" y="66" class="sub">Data flows one way: parse → model → evaluate → graph → search → check → score → report. Nothing downstream of the parser can reach AWS.</text>
+
+  <!-- inputs -->
+  <text x="28" y="100" class="colhead">INPUTS</text>
+  <rect x="28" y="112" width="282" height="156" rx="8" class="input"/>
+  <text x="44" y="136"><tspan class="btitle">Snapshot JSON</tspan><tspan class="small muted">   fixture or export</tspan></text>
+  <text x="44" y="155" class="small">fixtures/sample_environment.json</text>
+  <line x1="44" y1="167" x2="294" y2="167" class="divider"/>
+  <text x="44" y="185" class="small">•</text>
+  <text x="56" y="185" class="small">IAM users, groups, roles, policies</text>
+  <text x="44" y="202" class="small">•</text>
+  <text x="56" y="202" class="small">S3 buckets and bucket policies</text>
+  <text x="44" y="219" class="small">•</text>
+  <text x="56" y="219" class="small">Lambda functions, execution roles</text>
+  <text x="44" y="236" class="small">•</text>
+  <text x="56" y="236" class="small">EC2 instances &amp; security groups</text>
+  <text x="56" y="253" class="small muted">(network exposure inputs)</text>
+  <rect x="28" y="296" width="282" height="150" rx="10" class="opt-group"/>
+  <text x="44" y="318" class="optlabel">OPTIONAL · read-only AWS adapter</text>
+  <rect x="44" y="332" width="84" height="44" rx="8" class="opt"/>
+  <text x="86" y="359" class="label amber" text-anchor="middle">aws-scan</text>
+  <rect x="186" y="332" width="108" height="44" rx="8" class="opt"/>
+  <text x="240" y="359" class="label amber" text-anchor="middle">AWS account</text>
+  <path d="M128,354 H185" class="flow-opt" marker-end="url(#arrow-amber)"/>
+  <text x="157" y="345" class="small amber" text-anchor="middle">reads</text>
+  <text x="44" y="398" class="small amber">gated by --confirm · no root credentials</text>
+  <text x="44" y="415" class="small amber">botocore allow list · read-only calls</text>
+  <text x="44" y="432" class="small amber">boto3 only via pip install ".[aws]"</text>
+  <path d="M86,296 V269" class="flow-opt" marker-end="url(#arrow-amber)"/>
+  <text x="98" y="286" class="small amber">writes 0600 snapshot into scans/</text>
+  <rect x="28" y="474" width="282" height="56" rx="8" class="input"/>
+  <text x="44" y="498" class="btitle">IAM policy documents</text>
+  <text x="44" y="517" class="small">fixtures/iam_policies/ · file or directory</text>
+  <text x="28" y="548" class="small muted">policy-only mode · synthetic principals</text>
+  <rect x="28" y="572" width="282" height="56" rx="8" class="input"/>
+  <text x="44" y="596"><tspan class="btitle">Scenario fixtures</tspan><tspan class="small muted">   self-check inputs</tspan></text>
+  <text x="44" y="615" class="small">fixtures/scenarios/ · expected.json</text>
+  <text x="28" y="646" class="small muted">replayed by validate and the test suite</text>
+
+  <!-- inputs -> loader -->
+  <path d="M322,600 V172" class="flow"/>
+  <path d="M310,502 H322" class="flow"/>
+  <path d="M310,600 H322" class="flow"/>
+  <path d="M310,172 H365" class="flow" marker-end="url(#arrow)"/>
+  <circle cx="322" cy="502" r="2.6" class="dot"/>
+  <circle cx="322" cy="600" r="2.6" class="dot"/>
+  <circle cx="322" cy="172" r="2.6" class="dot"/>
+
+  <!-- design invariants -->
+  <text x="28" y="686" class="colhead">DESIGN INVARIANTS</text>
+  <text x="28" y="708" class="small muted">•</text>
+  <text x="40" y="708" class="small muted">one-way flow: no layer calls back into AWS</text>
+  <text x="28" y="725" class="small muted">•</text>
+  <text x="40" y="725" class="small muted">extras: boto3 [aws] · Streamlit [dashboard]</text>
+  <text x="28" y="742" class="small muted">•</text>
+  <text x="40" y="742" class="small muted">deterministic finding ids and ordering</text>
+  <text x="28" y="759" class="small muted">•</text>
+  <text x="40" y="759" class="small muted">evidence kind on every finding: observed,</text>
+  <text x="40" y="776" class="small muted">inferred, hypothetical or indeterminate</text>
+
+  <!-- offline core -->
+  <rect x="334" y="92" width="502" height="712" rx="12" class="core-group"/>
+  <text x="350" y="116"><tspan class="gtitle">Offline core</tspan><tspan class="gsub">  — zero third-party dependencies</tspan></text>
+  <text x="350" y="134" class="gsub">standard library only · never opens a network connection</text>
+  <!-- stage 1: Loader & parser -->
+  <rect x="366" y="150" width="136" height="44" rx="8" class="core"/>
+  <text x="434" y="177" class="label" text-anchor="middle">Loader &amp; parser</text>
+  <text x="516" y="168.5" class="small">strict validation of untrusted JSON</text>
+  <text x="516" y="184.5" class="small">size, depth and entity limits · schema warnings</text>
+  <!-- stage 2: Environment model -->
+  <rect x="366" y="216" width="136" height="44" rx="8" class="core"/>
+  <text x="434" y="235" class="label" text-anchor="middle">Environment</text>
+  <text x="434" y="252" class="label" text-anchor="middle">model</text>
+  <text x="516" y="234.5" class="small">immutable dataclasses shared by every layer</text>
+  <text x="516" y="250.5" class="small">identities, policies, buckets, functions, coverage</text>
+  <path d="M434,194 V215" class="flow" marker-end="url(#arrow)"/>
+  <text x="443" y="209.5" class="chain">entities</text>
+  <!-- stage 3: IAM evaluator -->
+  <rect x="366" y="300" width="136" height="44" rx="8" class="core"/>
+  <text x="434" y="327" class="label" text-anchor="middle">IAM evaluator</text>
+  <text x="516" y="294.5" class="small">tri-state: allowed · explicit deny · implicit deny ·</text>
+  <text x="516" y="310.5" class="small">indeterminate (never guesses unknown context)</text>
+  <text x="516" y="326.5" class="small">explicit deny wins · permissions boundaries ·</text>
+  <text x="516" y="342.5" class="small">resource policies · 26 condition operators ·</text>
+  <text x="516" y="358.5" class="small">policy variables · same- vs cross-account rules</text>
+  <path d="M434,260 V299" class="flow" marker-end="url(#arrow)"/>
+  <text x="443" y="284.5" class="chain">model</text>
+  <!-- stage 4: Graph builder -->
+  <rect x="366" y="402" width="136" height="44" rx="8" class="core"/>
+  <text x="434" y="429" class="label" text-anchor="middle">Graph builder</text>
+  <path d="M516,392 H539" class="edge-observed"/>
+  <text x="546" y="396.5" class="small">observed structure: member-of, has-policy,</text>
+  <text x="546" y="412.5" class="small">trusts, executes-as (from the snapshot)</text>
+  <path d="M516,424 H539" class="edge-evaluated" marker-end="url(#arrow-blue)"/>
+  <text x="546" y="428.5" class="small">evaluator-backed: can-assume, can-access</text>
+  <text x="546" y="444.5" class="small">each carrying the statements that justify it</text>
+  <path d="M516,456 H539" class="edge-exposure"/>
+  <text x="546" y="460.5" class="small">exposure: public and cross-account grants</text>
+  <path d="M434,344 V401" class="flow" marker-end="url(#arrow)"/>
+  <text x="443" y="377.5" class="chain">decisions</text>
+  <!-- stage 5: Bounded path search -->
+  <rect x="366" y="488" width="136" height="44" rx="8" class="core"/>
+  <text x="434" y="507" class="label" text-anchor="middle">Bounded</text>
+  <text x="434" y="524" class="label" text-anchor="middle">path search</text>
+  <text x="516" y="498.5" class="small">from every user, role, function, external account</text>
+  <text x="516" y="514.5" class="small">and anonymous node · can-assume, executes-as</text>
+  <text x="516" y="530.5" class="small">max depth 4 · 5 paths per pair · 10 000 total</text>
+  <path d="M434,446 V487" class="flow" marker-end="url(#arrow)"/>
+  <text x="443" y="471.5" class="chain">edges</text>
+  <!-- stage 6: Checks (20+) -->
+  <rect x="366" y="574" width="136" height="44" rx="8" class="core"/>
+  <text x="434" y="601" class="label" text-anchor="middle">Checks (20+)</text>
+  <text x="516" y="568.5" class="small">query the evaluator, graph and paths directly</text>
+  <text x="516" y="584.5" class="small">admin · wildcard · trust · assume / passrole</text>
+  <text x="516" y="600.5" class="small">IAM &amp; credential writes · Lambda writes</text>
+  <text x="516" y="616.5" class="small">S3 / Lambda public exposure · sensitive access</text>
+  <text x="516" y="632.5" class="small">paths · evaluation limitations · coverage</text>
+  <path d="M434,532 V573" class="flow" marker-end="url(#arrow)"/>
+  <text x="443" y="557.5" class="chain">paths</text>
+  <!-- stage 7: Scoring -->
+  <rect x="366" y="658" width="136" height="44" rx="8" class="core"/>
+  <text x="434" y="685" class="label" text-anchor="middle">Scoring</text>
+  <text x="516" y="676.5" class="small">TOML model (--scoring-config) · severity caps</text>
+  <text x="516" y="692.5" class="small">by evidence kind · breakdown on every finding</text>
+  <path d="M434,618 V657" class="flow" marker-end="url(#arrow)"/>
+  <text x="443" y="642.5" class="chain">findings</text>
+  <!-- stage 8: Findings & report model -->
+  <rect x="366" y="724" width="136" height="44" rx="8" class="core"/>
+  <text x="434" y="743" class="label" text-anchor="middle">Findings &amp;</text>
+  <text x="434" y="760" class="label" text-anchor="middle">report model</text>
+  <text x="516" y="742.5" class="small">AnalysisReport: deterministic ids, evidence,</text>
+  <text x="516" y="758.5" class="small">confidence, preconditions, remediation</text>
+  <path d="M434,702 V723" class="flow" marker-end="url(#arrow)"/>
+  <text x="443" y="717.5" class="chain">scores</text>
+  <!-- checks query the evaluator and the graph directly -->
+  <path d="M366,322 H354 V596 H365" class="rail" marker-end="url(#arrow-rail)"/>
+  <path d="M366,424 H354" class="rail"/>
+  <circle cx="354" cy="424" r="2.6" class="dot"/>
+  <text x="346" y="459" class="chain" text-anchor="middle" transform="rotate(-90 346 459)">queried directly by the checks</text>
+  <!-- report model -> outputs -->
+  <path d="M434,768 V788 H849 V482 H861" class="flow" marker-end="url(#arrow)"/>
+  <path d="M849,674 H861" class="flow" marker-end="url(#arrow)"/>
+  <path d="M849,770 H861" class="flow" marker-end="url(#arrow)"/>
+  <circle cx="849" cy="674" r="2.6" class="dot"/>
+  <circle cx="849" cy="770" r="2.6" class="dot"/>
+  <text x="448" y="781" class="chain">AnalysisReport: findings, graph summary, limitations</text>
+
+  <!-- legend -->
+  <text x="862" y="100" class="colhead">LEGEND</text>
+  <rect x="862" y="112" width="270" height="198" rx="10" class="card"/>
+  <rect x="878" y="125" width="30" height="15" rx="4" class="core"/>
+  <text x="920" y="136" class="legend">Offline core stage</text>
+  <rect x="878" y="147" width="30" height="15" rx="4" class="opt-dashed"/>
+  <text x="920" y="158" class="legend">Optional, opt-in component</text>
+  <rect x="878" y="169" width="30" height="15" rx="4" class="out"/>
+  <text x="920" y="180" class="legend">Output / report consumer</text>
+  <path d="M878,198 H908" class="flow" marker-end="url(#arrow)"/>
+  <text x="920" y="202" class="legend">Data flow</text>
+  <path d="M878,220 H908" class="flow-opt" marker-end="url(#arrow-amber)"/>
+  <text x="920" y="224" class="legend">Optional, opt-in path</text>
+  <path d="M878,242 H908" class="edge-observed"/>
+  <text x="920" y="246" class="legend">Observed-structure graph edge</text>
+  <path d="M878,264 H908" class="edge-evaluated" marker-end="url(#arrow-blue)"/>
+  <text x="920" y="268" class="legend">Evaluator-backed graph edge</text>
+  <path d="M878,286 H908" class="edge-exposure"/>
+  <text x="920" y="290" class="legend">Exposure graph edge</text>
+
+  <!-- outputs -->
+  <text x="862" y="436" class="colhead">OUTPUTS</text>
+  <rect x="862" y="448" width="270" height="68" rx="8" class="out"/>
+  <text x="878" y="472" class="btitle green">Reports</text>
+  <text x="878" y="491" class="small">JSON · Markdown (Mermaid) · HTML</text>
+  <text x="878" y="508" class="small muted">escaped output · HTML: strict CSP</text>
+  <rect x="862" y="544" width="270" height="68" rx="8" class="out"/>
+  <text x="878" y="568" class="btitle green">CLI</text>
+  <text x="878" y="587" class="small">analyze · validate · version</text>
+  <text x="878" y="604" class="small muted">writes to --output · exit codes 0–4</text>
+  <rect x="862" y="640" width="270" height="68" rx="8" class="out"/>
+  <text x="878" y="664" class="btitle green">Scenario self-check</text>
+  <text x="878" y="683" class="small">attackpath validate</text>
+  <text x="878" y="700" class="small muted">fixtures/scenarios vs expected.json</text>
+  <rect x="862" y="736" width="270" height="68" rx="8" class="opt-dashed"/>
+  <text x="878" y="760"><tspan class="btitle amber">Streamlit dashboard</tspan><tspan class="small muted">   optional</tspan></text>
+  <text x="878" y="779" class="small amber">dashboard --input &lt;snapshot&gt;</text>
+  <text x="878" y="796" class="small muted">same pipeline, run in-process</text>
+  <path d="M997,516 V543" class="flow" marker-end="url(#arrow)"/>
+  <text x="1006" y="534.5" class="chain">to --output</text>
+</svg>

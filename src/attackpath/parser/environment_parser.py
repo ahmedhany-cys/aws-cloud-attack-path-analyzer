@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import ipaddress
 from collections.abc import Mapping
 from typing import Any
 
@@ -12,15 +13,18 @@ from attackpath.models.environment import (
     AccessKey,
     Coverage,
     CoverageStatus,
+    Ec2Instance,
     Environment,
     ExternalPrincipal,
     Group,
+    IngressRule,
     LambdaFunction,
     ManagedPolicy,
     Metadata,
     PublicAccessBlock,
     Role,
     S3Bucket,
+    SecurityGroup,
     Sensitivity,
     ServiceCoverage,
     User,
@@ -41,9 +45,13 @@ _TOP_LEVEL_KEYS = frozenset(
         "managed_policies",
         "s3_buckets",
         "lambda_functions",
+        "security_groups",
+        "ec2_instances",
         "external_principals",
     }
 )
+_PROTOCOLS = frozenset({"tcp", "udp", "icmp", "icmpv6", "all"})
+_PORTLESS_PROTOCOLS = frozenset({"icmp", "icmpv6", "all"})
 
 
 def parse_environment(
@@ -103,6 +111,14 @@ def parse_environment(
         _parse_lambda(item, f"{source}.lambda_functions[{i}]", account_id, warnings)
         for i, item in enumerate(_opt_list(data, "lambda_functions", source))
     ]
+    security_groups = [
+        _parse_security_group(item, f"{source}.security_groups[{i}]")
+        for i, item in enumerate(_opt_list(data, "security_groups", source))
+    ]
+    instances = [
+        _parse_instance(item, f"{source}.ec2_instances[{i}]", account_id)
+        for i, item in enumerate(_opt_list(data, "ec2_instances", source))
+    ]
     externals = [
         _parse_external(item, f"{source}.external_principals[{i}]")
         for i, item in enumerate(_opt_list(data, "external_principals", source))
@@ -112,9 +128,10 @@ def parse_environment(
         raise LimitExceededError(
             f"{source}: {len(users) + len(roles)} principals exceed the limit of {limits.max_principals}"
         )
-    if len(buckets) + len(functions) > limits.max_resources:
+    resources = len(buckets) + len(functions) + len(instances)
+    if resources > limits.max_resources:
         raise LimitExceededError(
-            f"{source}: {len(buckets) + len(functions)} resources exceed the limit of {limits.max_resources}"
+            f"{source}: {resources} resources exceed the limit of {limits.max_resources}"
         )
 
     _reject_duplicates([u.arn for u in users], "users", source)
@@ -123,12 +140,22 @@ def parse_environment(
     _reject_duplicates([p.arn for p in managed_policies], "managed_policies", source)
     _reject_duplicates([b.arn for b in buckets], "s3_buckets", source)
     _reject_duplicates([f.arn for f in functions], "lambda_functions", source)
+    _reject_duplicates([g.group_id for g in security_groups], "security_groups", source)
+    _reject_duplicates([i.arn for i in instances], "ec2_instances", source)
 
     group_names = {g.name for g in groups}
     for user in users:
         for name in user.groups:
             if name not in group_names:
                 warnings.append(f"{source}: user {user.name} references unknown group {name!r}")
+    security_group_ids = {g.group_id for g in security_groups}
+    for instance in instances:
+        for group_id in instance.security_group_ids:
+            if group_id not in security_group_ids:
+                warnings.append(
+                    f"{source}: instance {instance.instance_id} references unknown security "
+                    f"group {group_id!r}; its network exposure cannot be determined"
+                )
 
     return Environment(
         account_id=account_id,
@@ -141,6 +168,8 @@ def parse_environment(
         managed_policies=managed_policies,
         s3_buckets=buckets,
         lambda_functions=functions,
+        security_groups=security_groups,
+        ec2_instances=instances,
         external_principals=externals,
     )
 
@@ -391,6 +420,106 @@ def _parse_lambda(raw: Any, where: str, account_id: str, warnings: list[str]) ->
         runtime=_opt_str(raw, "runtime", where),
         resource_policy=policy,
         description=_opt_str(raw, "description", where),
+        tags=_opt_str_dict(raw, "tags", where),
+    )
+
+
+def _parse_security_group(raw: Any, where: str) -> SecurityGroup:
+    if not isinstance(raw, Mapping):
+        raise InputError(f"{where}: must be an object")
+    group_id = _req_str(raw, "group_id", where)
+    rules = [
+        _parse_ingress_rule(item, f"{where}.ingress[{i}]")
+        for i, item in enumerate(_opt_list(raw, "ingress", where))
+    ]
+    return SecurityGroup(
+        group_id=group_id,
+        name=_opt_str(raw, "name", where),
+        vpc_id=_opt_str(raw, "vpc_id", where),
+        description=_opt_str(raw, "description", where),
+        ingress=rules,
+        tags=_opt_str_dict(raw, "tags", where),
+    )
+
+
+def _parse_ingress_rule(raw: Any, where: str) -> IngressRule:
+    if not isinstance(raw, Mapping):
+        raise InputError(f"{where}: must be an object")
+    protocol_raw = _opt_str(raw, "protocol", where) or "tcp"
+    protocol = "all" if protocol_raw == "-1" else protocol_raw.lower()
+    if protocol not in _PROTOCOLS:
+        raise InputError(
+            f"{where}: unsupported protocol {protocol_raw!r} (expected tcp, udp, icmp, icmpv6 or all)"
+        )
+    from_port = _opt_int(raw, "from_port", where)
+    to_port = _opt_int(raw, "to_port", where)
+    if (from_port is None) != (to_port is None):
+        raise InputError(f"{where}: from_port and to_port must be given together")
+    if from_port is not None and to_port is not None:
+        if not (0 <= from_port <= 65535 and 0 <= to_port <= 65535):
+            raise InputError(f"{where}: ports must be between 0 and 65535")
+        if from_port > to_port:
+            raise InputError(f"{where}: from_port must not exceed to_port")
+    if protocol in _PORTLESS_PROTOCOLS:
+        from_port = to_port = None
+    cidrs = _opt_str_list(raw, "cidrs", where)
+    ipv6_cidrs = _opt_str_list(raw, "ipv6_cidrs", where)
+    for cidr in (*cidrs, *ipv6_cidrs):
+        try:
+            ipaddress.ip_network(cidr, strict=False)
+        except ValueError as exc:
+            raise InputError(f"{where}: {cidr!r} is not a valid CIDR block") from exc
+    source_groups = _opt_str_list(raw, "source_groups", where)
+    if not (cidrs or ipv6_cidrs or source_groups):
+        raise InputError(f"{where}: an ingress rule needs cidrs, ipv6_cidrs or source_groups")
+    return IngressRule(
+        protocol=protocol,
+        from_port=from_port,
+        to_port=to_port,
+        cidrs=tuple(cidrs),
+        ipv6_cidrs=tuple(ipv6_cidrs),
+        source_groups=tuple(source_groups),
+        description=_opt_str(raw, "description", where),
+    )
+
+
+def _parse_instance(raw: Any, where: str, account_id: str) -> Ec2Instance:
+    if not isinstance(raw, Mapping):
+        raise InputError(f"{where}: must be an object")
+    instance_id = _req_str(raw, "instance_id", where)
+    region = _opt_str(raw, "region", where)
+    arn = (
+        _opt_str(raw, "arn", where)
+        or f"arn:aws:ec2:{region or 'us-east-1'}:{account_id}:instance/{instance_id}"
+    )
+    parsed = parse_arn(arn)
+    if parsed is None or parsed.service != "ec2":
+        raise InputError(f"{where}: {arn!r} is not an EC2 instance ARN")
+    role_arn = _opt_str(raw, "role_arn", where)
+    if role_arn is not None and parse_arn(role_arn) is None:
+        raise InputError(f"{where}: role_arn {role_arn!r} is not an ARN")
+    public_ip = _opt_str(raw, "public_ip", where)
+    if public_ip is not None:
+        try:
+            ipaddress.ip_address(public_ip)
+        except ValueError as exc:
+            raise InputError(f"{where}: public_ip {public_ip!r} is not an IP address") from exc
+    return Ec2Instance(
+        instance_id=instance_id,
+        arn=arn,
+        account_id=parsed.account or account_id,
+        region=region or parsed.region or None,
+        name=_opt_str(raw, "name", where),
+        state=(_opt_str(raw, "state", where) or "running").lower(),
+        public_ip=public_ip,
+        public_dns=_opt_str(raw, "public_dns", where),
+        subnet_id=_opt_str(raw, "subnet_id", where),
+        vpc_id=_opt_str(raw, "vpc_id", where),
+        internet_facing=_opt_bool(raw, "internet_facing", where),
+        security_group_ids=list(_opt_str_list(raw, "security_groups", where)),
+        role_arn=role_arn,
+        instance_profile_arn=_opt_str(raw, "instance_profile_arn", where),
+        imdsv2_required=_opt_bool(raw, "imdsv2_required", where),
         tags=_opt_str_dict(raw, "tags", where),
     )
 

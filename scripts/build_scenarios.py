@@ -110,6 +110,25 @@ SCENARIOS: dict[str, dict[str, Any]] = {
         "managed_policies": ["arn:aws:iam::aws:policy/AdministratorAccess"],
         "modify": "remediate_assume_role",
     },
+    "11-public-instance-path": {
+        "description": "An internet-exposed jump host runs with a role that reads the PII bucket (a multi-service path), a web instance exposes SSH and allows IMDSv1, and a private worker produces no exposure finding.",
+        "roles": ["ec2-jump-host-legacy", "ec2-web-instance", "data-pipeline-worker"],
+        "s3_buckets": ["customer-pii-exports", "public-marketing-assets"],
+        "security_groups": [
+            "sg-0jump000000000003",
+            "sg-0web0000000000001",
+            "sg-0int0000000000002",
+        ],
+        "ec2_instances": ["i-0jump00000000000b", "i-0web000000000000a", "i-0batch0000000000c"],
+        "coverage": {
+            "services": {
+                "iam": "complete",
+                "s3": "complete",
+                "lambda": "complete",
+                "ec2": "complete",
+            }
+        },
+    },
 }
 
 
@@ -182,6 +201,12 @@ def build(sample: dict[str, Any], name: str, spec: dict[str, Any]) -> dict[str, 
         "s3_buckets": _select(sample["s3_buckets"], "name", spec.get("s3_buckets")),
         "lambda_functions": _select(
             sample["lambda_functions"], "name", spec.get("lambda_functions")
+        ),
+        "security_groups": _select(
+            sample.get("security_groups", []), "group_id", spec.get("security_groups")
+        ),
+        "ec2_instances": _select(
+            sample.get("ec2_instances", []), "instance_id", spec.get("ec2_instances")
         ),
     }
     if name == "09-incomplete-inventory":

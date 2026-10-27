@@ -66,9 +66,23 @@ def substitute_policy_variables(
     return POLICY_VARIABLE_RE.sub(_replace, pattern), unresolved
 
 
-def arn_matches(pattern: str, arn: str, variables: Mapping[str, str | None] | None = None) -> Tri:
-    """Resource matching; ``UNKNOWN`` when a policy variable cannot be resolved."""
-    if "${" in pattern:
+#: The only policy language version in which ``${...}`` policy variables are interpreted.
+POLICY_VARIABLE_VERSION = "2012-10-17"
+
+
+def arn_matches(
+    pattern: str,
+    arn: str,
+    variables: Mapping[str, str | None] | None = None,
+    *,
+    literal_variables: bool = False,
+) -> Tri:
+    """Resource matching; ``UNKNOWN`` when a policy variable cannot be resolved.
+
+    With ``literal_variables`` (documents without ``Version: 2012-10-17``) a ``${...}``
+    sequence is ordinary text, as AWS treats it.
+    """
+    if "${" in pattern and not literal_variables:
         pattern, unresolved = substitute_policy_variables(pattern, variables)
         if unresolved:
             return Tri.UNKNOWN
@@ -84,13 +98,25 @@ def statement_action_matches(statement: Statement, action: str) -> bool:
 
 
 def statement_resource_matches(
-    statement: Statement, arn: str, variables: Mapping[str, str | None] | None = None
+    statement: Statement,
+    arn: str,
+    variables: Mapping[str, str | None] | None = None,
+    *,
+    literal_variables: bool = False,
 ) -> Tri:
     """Resource match for ``statement``; statements without a resource element apply."""
     if statement.resources:
-        return tri_any(arn_matches(p, arn, variables) for p in statement.resources)
+        return tri_any(
+            arn_matches(p, arn, variables, literal_variables=literal_variables)
+            for p in statement.resources
+        )
     if statement.not_resources:
-        return tri_not(tri_any(arn_matches(p, arn, variables) for p in statement.not_resources))
+        return tri_not(
+            tri_any(
+                arn_matches(p, arn, variables, literal_variables=literal_variables)
+                for p in statement.not_resources
+            )
+        )
     return Tri.TRUE
 
 

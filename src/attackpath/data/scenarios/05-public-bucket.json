@@ -82,5 +82,7 @@
       }
     }
   ],
-  "lambda_functions": []
+  "lambda_functions": [],
+  "security_groups": [],
+  "ec2_instances": []
 }

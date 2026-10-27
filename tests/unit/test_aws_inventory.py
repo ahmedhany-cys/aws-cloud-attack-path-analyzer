@@ -76,6 +76,9 @@ class Clients:
 
     def collector(self, **kwargs: Any) -> AwsInventoryCollector:
         kwargs.setdefault("sleeper", self.sleeps.append)
+        # The IAM/S3/Lambda tests predate the EC2 inventory; they select the three
+        # services explicitly so that no EC2 responses need to be queued.
+        kwargs.setdefault("services", ("iam", "s3", "lambda"))
         return AwsInventoryCollector(self.session, REGION, **kwargs)
 
     def assert_all_consumed(self) -> None:
@@ -83,14 +86,14 @@ class Clients:
             stub.assert_no_pending_responses()
 
 
-@pytest.fixture
-def clients(monkeypatch: pytest.MonkeyPatch) -> Clients:
+def build_clients(monkeypatch: pytest.MonkeyPatch) -> Clients:
+    """Stubbed clients for every service the collector knows (shared with the EC2 tests)."""
     session = boto3.session.Session(
         aws_access_key_id="testing",
         aws_secret_access_key="testing",  # pragma: allowlist secret
         region_name=REGION,
     )
-    built = {name: session.client(name) for name in ("sts", "iam", "s3", "lambda")}
+    built = {name: session.client(name) for name in ("sts", "iam", "s3", "lambda", "ec2")}
     stubs = {name: Stubber(client) for name, client in built.items()}
     for stub in stubs.values():
         stub.activate()
@@ -98,6 +101,11 @@ def clients(monkeypatch: pytest.MonkeyPatch) -> Clients:
     # the stubbed ones regardless of the keyword arguments it passes.
     monkeypatch.setattr(session, "client", lambda name, **_: built[name])
     return Clients(session=session, stubs=stubs)
+
+
+@pytest.fixture
+def clients(monkeypatch: pytest.MonkeyPatch) -> Clients:
+    return build_clients(monkeypatch)
 
 
 # ---------------------------------------------------------------------------
@@ -506,6 +514,7 @@ def test_two_page_authorization_details_are_merged_and_snapshot_parses(clients: 
         "iam": "complete",
         "s3": "complete",
         "lambda": "complete",
+        "ec2": "missing",  # not requested by this test's service selection
     }
 
     # IAM entities from both pages were merged
@@ -575,9 +584,12 @@ def test_two_page_authorization_details_are_merged_and_snapshot_parses(clients: 
         "managed_policies": 2,
         "s3_buckets": 1,
         "lambda_functions": 2,
+        "ec2_instances": 0,
+        "security_groups": 0,
         "external_principals": 0,
     }
-    assert env.coverage.is_complete
+    assert not env.coverage.is_complete  # ec2 was not requested, so it is reported missing
+    assert env.coverage.status_of("iam").value == "complete"
     assert clients.sleeps == []
 
 
@@ -646,7 +658,8 @@ def test_access_denied_on_list_functions_marks_lambda_missing(clients: Clients) 
     assert coverage(snapshot, "iam")["status"] == "complete"
     assert coverage(snapshot, "s3")["status"] == "complete"
     env = parse_environment(snapshot, "test")
-    assert [name for name, _ in env.coverage.incomplete_services()] == ["lambda"]
+    # ec2 was not requested by this test's service selection, so it is reported missing too.
+    assert [name for name, _ in env.coverage.incomplete_services()] == ["ec2", "lambda"]
 
 
 def test_access_denied_on_primary_iam_listing_marks_iam_missing(clients: Clients) -> None:
@@ -943,7 +956,7 @@ def test_root_identity_is_refused(clients: Clients) -> None:
 
 def test_unknown_service_and_bad_attempts_are_rejected(clients: Clients) -> None:
     with pytest.raises(AwsScanError, match="unsupported service"):
-        clients.collector(services=("iam", "ec2"))
+        clients.collector(services=("iam", "rds"))
     with pytest.raises(AwsScanError, match="at least one service"):
         clients.collector(services=())
     with pytest.raises(AwsScanError, match="max_attempts"):

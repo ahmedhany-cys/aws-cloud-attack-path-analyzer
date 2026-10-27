@@ -107,7 +107,9 @@ def build_parser() -> argparse.ArgumentParser:
     scan_p.add_argument(
         "--profile", required=True, help="AWS CLI profile to use (never the root user)"
     )
-    scan_p.add_argument("--region", required=True, help="region for regional services (Lambda)")
+    scan_p.add_argument(
+        "--region", required=True, help="region for regional services (Lambda, EC2)"
+    )
     scan_p.add_argument(
         "--output",
         type=Path,
@@ -115,8 +117,8 @@ def build_parser() -> argparse.ArgumentParser:
     )
     scan_p.add_argument(
         "--services",
-        default="iam,s3,lambda",
-        help="comma-separated services to inventory (default iam,s3,lambda)",
+        default="iam,s3,lambda,ec2",
+        help="comma-separated services to inventory (default iam,s3,lambda,ec2)",
     )
     scan_p.add_argument(
         "--confirm",

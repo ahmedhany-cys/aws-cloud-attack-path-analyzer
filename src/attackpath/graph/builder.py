@@ -26,11 +26,14 @@ from attackpath.iam.matching import action_breadth, resource_breadth, service_of
 from attackpath.iam.principals import PrincipalIdentity
 from attackpath.models.arn import account_of, is_account_root, parse_arn
 from attackpath.models.environment import (
+    Ec2Instance,
     Environment,
+    IngressRule,
     Principal,
     PrincipalKind,
     Role,
     S3Bucket,
+    SecurityGroup,
     Sensitivity,
     User,
 )
@@ -39,6 +42,14 @@ from attackpath.models.policy import Condition, Effect, PolicyDocument, Statemen
 from attackpath.tri import Tri
 
 ANONYMOUS_NODE_ID = "anonymous"
+INTERNET_NODE_ID = "internet"
+EXPLOIT_PRECONDITION = (
+    "a service listening on an exposed port must be exploitable or accept weak or leaked "
+    "credentials"
+)
+ROUTING_PRECONDITION = (
+    "the instance's subnet must route to an internet gateway (route table not in the snapshot)"
+)
 
 #: (class name, action, resource template) probed for every principal/bucket pair.
 ACCESS_CLASSES: tuple[tuple[str, str, str], ...] = (
@@ -141,6 +152,7 @@ def build_graph(
     _add_assume_edges(graph, env, evaluator)
     _add_access_edges(graph, env, evaluator)
     _add_lambda_invoke_edges(graph, env, evaluator)
+    _add_network_edges(graph, env)
     return graph
 
 
@@ -204,6 +216,24 @@ def _add_nodes(graph: AttackGraph, env: Environment) -> None:
     for fn in env.lambda_functions:
         graph.add_node(
             Node(id=fn.arn, type=NodeType.LAMBDA_FUNCTION, label=fn.name, account_id=fn.account_id)
+        )
+    for instance in env.ec2_instances:
+        graph.add_node(
+            Node(
+                id=instance.arn,
+                type=NodeType.EC2_INSTANCE,
+                label=instance.label,
+                account_id=instance.account_id,
+                attrs={
+                    "instance_id": instance.instance_id,
+                    "state": instance.state,
+                    "public_ip": instance.public_ip,
+                    "internet_facing": instance.internet_facing,
+                    "imdsv2_required": instance.imdsv2_required,
+                    "role_arn": instance.role_arn,
+                    "security_groups": list(instance.security_group_ids),
+                },
+            )
         )
     for external in env.external_principals:
         _external_node(graph, external.arn, known=external.known, description=external.description)
@@ -286,6 +316,26 @@ def _add_structural_edges(graph: AttackGraph, env: Environment) -> None:
                 "executes as",
                 evidence=(
                     Evidence(source=f"lambda:{fn.arn}", detail=f"execution role {fn.role_arn}"),
+                ),
+            )
+        )
+    for instance in env.ec2_instances:
+        if not instance.role_arn or not instance.is_running:
+            continue
+        if env.role(instance.role_arn) is None:
+            _placeholder_principal(graph, instance.role_arn)
+        profile = instance.instance_profile_arn or "instance profile"
+        graph.add_edge(
+            Edge(
+                instance.arn,
+                instance.role_arn,
+                EdgeType.RUNS_AS,
+                "runs as",
+                evidence=(
+                    Evidence(
+                        source=f"ec2:{instance.arn}",
+                        detail=f"{profile} provides the credentials of {instance.role_arn}",
+                    ),
                 ),
             )
         )
@@ -392,6 +442,10 @@ def _flag_privilege(graph: AttackGraph, env: Environment, evaluator: PolicyEvalu
         node = graph.node(role_arn)
         if node is not None:
             node.attrs["used_by_lambdas"] = sorted(fn.name for fn in functions)
+    for role_arn, instances in env.roles_used_by_instances().items():
+        node = graph.node(role_arn)
+        if node is not None:
+            node.attrs["used_by_instances"] = sorted(i.label for i in instances)
 
 
 # ---------------------------------------------------------------------------
@@ -679,6 +733,103 @@ def _add_lambda_invoke_edges(
                     attrs={"access": {a: r.decision.value for a, r in possible.items()}},
                 )
             )
+
+
+# ---------------------------------------------------------------------------
+# network exposure edges (the internet reaching an instance's open ports)
+# ---------------------------------------------------------------------------
+
+
+def public_ingress_of(
+    env: Environment, instance: Ec2Instance
+) -> list[tuple[SecurityGroup, IngressRule]]:
+    """Internet-wide ingress rules of the instance's security groups (unknown groups ignored)."""
+    rules: list[tuple[SecurityGroup, IngressRule]] = []
+    for group_id in instance.security_group_ids:
+        group = env.security_group(group_id)
+        if group is not None:
+            rules.extend((group, rule) for rule in group.public_ingress())
+    return rules
+
+
+def exposure_label(rules: Iterable[IngressRule]) -> str:
+    """``all ports`` or a compact, sorted list such as ``tcp 22, tcp 80-81``."""
+    spans: dict[tuple[str, int, int], str] = {}
+    for rule in rules:
+        if rule.protocol == "all":
+            return "all ports"
+        if rule.all_ports:
+            spans[(rule.protocol, 0, 65535)] = f"{rule.protocol} all ports"
+        elif rule.portless:
+            spans[(rule.protocol, -1, -1)] = f"{rule.protocol} (all types)"
+        elif rule.from_port is None or rule.to_port is None:
+            continue  # unreachable for tcp/udp (all_ports) but keeps the type checker honest
+        elif rule.from_port == rule.to_port:
+            spans[(rule.protocol, rule.from_port, rule.to_port)] = (
+                f"{rule.protocol} {rule.from_port}"
+            )
+        else:
+            spans[(rule.protocol, rule.from_port, rule.to_port)] = (
+                f"{rule.protocol} {rule.from_port}-{rule.to_port}"
+            )
+    return ", ".join(spans[key] for key in sorted(spans))
+
+
+def _add_network_edges(graph: AttackGraph, env: Environment) -> None:
+    for instance in env.ec2_instances:
+        node = graph.node(instance.arn)
+        if node is None:
+            continue
+        rules = public_ingress_of(env, instance)
+        node.attrs["public_ingress"] = [rule.describe() for _, rule in rules]
+        node.attrs["unresolved_security_groups"] = [
+            gid for gid in instance.security_group_ids if env.security_group(gid) is None
+        ]
+        if not rules or not instance.public_ip or not instance.is_running:
+            continue
+        if instance.internet_facing is False:
+            continue  # a public address in a subnet without an internet-gateway route
+        management: dict[int, str] = {}
+        for _, rule in rules:
+            management.update(rule.management_ports())
+        preconditions = [EXPLOIT_PRECONDITION]
+        if instance.internet_facing is None:
+            preconditions.append(ROUTING_PRECONDITION)
+        evidence = [
+            Evidence(source=f"security-group:{group.group_id}", detail=f"ingress {rule.describe()}")
+            for group, rule in rules
+        ]
+        evidence.append(
+            Evidence(
+                source=f"ec2:{instance.arn}",
+                detail=f"public IP {instance.public_ip}"
+                + (", subnet routes to an internet gateway" if instance.internet_facing else ""),
+            )
+        )
+        internet = graph.add_node(
+            Node(id=INTERNET_NODE_ID, type=NodeType.INTERNET, label="the internet")
+        )
+        label = exposure_label(rule for _, rule in rules)
+        graph.add_edge(
+            Edge(
+                internet.id,
+                instance.arn,
+                EdgeType.NETWORK_EXPOSED,
+                f"reachable on {label}",
+                confidence=Confidence.MEDIUM,
+                evidence_kind=EvidenceKind.HYPOTHETICAL,
+                evidence=tuple(_dedupe_evidence(evidence)),
+                preconditions=tuple(preconditions),
+                attrs={
+                    "ports": label,
+                    "all_ports": any(rule.all_ports for _, rule in rules),
+                    "management_ports": {str(p): n for p, n in sorted(management.items())},
+                    "public_ip": instance.public_ip,
+                    "internet_facing": instance.internet_facing,
+                    "security_groups": sorted({group.group_id for group, _ in rules}),
+                },
+            )
+        )
 
 
 def _dedupe_evidence(items: Sequence[Evidence], limit: int = 8) -> list[Evidence]:

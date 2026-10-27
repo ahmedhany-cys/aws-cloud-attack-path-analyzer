@@ -14,10 +14,10 @@ flowchart LR
         A[(AWS account)]
     end
     C[aws/ read-only collector\nbotocore allow list] -. optional, opt-in .-> F
-    A -. GetAccountAuthorizationDetails,\nList/Get bucket + function config .-> C
+    A -. GetAccountAuthorizationDetails,\nList/Get bucket + function config,\nDescribe instances, security groups, route tables .-> C
     F --> L[parser/ loader\nsize + depth limits]
     P --> L
-    L --> M[models/ Environment\nusers, roles, policies, buckets, functions, coverage]
+    L --> M[models/ Environment\nusers, roles, policies, buckets, functions,\ninstances, security groups, coverage]
     M --> E[iam/ evaluator\ntri-state: allow / deny / indeterminate]
     E --> G[graph/ builder\nnodes + evidence-carrying edges]
     G --> S[graph/ paths\nbounded reachability search]
@@ -69,9 +69,9 @@ Kleene semantics, so a Deny whose condition cannot be decided produces `indeterm
 
 ## The graph
 
-Nodes: account, user, group, role, managed policy, S3 bucket, Lambda function, external account,
-external principal, anonymous, service. Edges carry a type, a label, the evidence that justifies
-them, a confidence level, an evidence kind and preconditions:
+Nodes: account, user, group, role, managed policy, S3 bucket, Lambda function, EC2 instance,
+external account, external principal, anonymous, internet, service. Edges carry a type, a label,
+the evidence that justifies them, a confidence level, an evidence kind and preconditions:
 
 | Edge | Source → target | Produced by |
 |---|---|---|
@@ -79,15 +79,18 @@ them, a confidence level, an evidence kind and preconditions:
 | `has-policy` | principal or group → managed policy | snapshot |
 | `trusts` | role → trusted principal node | trust-policy classification |
 | `executes-as` | function → execution role | snapshot |
+| `runs-as` | running instance → instance-profile role | snapshot |
+| `network-exposed` | internet → running instance with a public address and internet-wide security-group ingress | security-group classification (hypothetical: assumes the exposed service can be compromised) |
 | `can-assume` | principal, external account or anonymous → role | `PolicyEvaluator.can_assume` (trust policy + identity permission) |
 | `can-access` | principal, external account or anonymous → bucket (or function for invoke) | `PolicyEvaluator.evaluate` for read/list/write/delete/policy classes |
 
-Path search starts at every user, role, function, external account and anonymous node, moves along
-`can-assume` and `executes-as` edges, and terminates at an administrative principal or at a sensitive
-bucket reached through a final `can-access` edge. Depth (default 4), paths per source/target pair
-(5) and total paths (10 000) are capped; truncation is reported in the graph summary. Access edges
-that exist only because a bucket policy grants to everyone are not traversable: that fact is
-reported once as a public-exposure finding instead of once per principal.
+Path search starts at every user, role, function, instance, external account, anonymous and
+internet node, moves along `can-assume`, `executes-as`, `runs-as` and `network-exposed` edges, and
+terminates at an administrative principal or at a sensitive bucket reached through a final
+`can-access` edge. Depth (default 4), paths per source/target pair (5) and total paths (10 000) are
+capped; truncation is reported in the graph summary. Access edges that exist only because a bucket
+policy grants to everyone are not traversable: that fact is reported once as a public-exposure
+finding instead of once per principal.
 
 ## Checks
 

@@ -49,3 +49,13 @@ GET_ACCOUNT_AUTHORIZATION_DETAILS = (
 CROSS_ACCOUNT_ROLES = (
     "https://docs.aws.amazon.com/IAM/latest/UserGuide/tutorial_cross-account-with-roles.html"
 )
+EC2_SECURITY_GROUP_RULES = (
+    "https://docs.aws.amazon.com/vpc/latest/userguide/security-group-rules.html"
+)
+EC2_IMDS = (
+    "https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/configuring-instance-metadata-service.html"
+)
+EC2_IAM_ROLES = "https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/iam-roles-for-amazon-ec2.html"
+SSM_SESSION_MANAGER = (
+    "https://docs.aws.amazon.com/systems-manager/latest/userguide/session-manager.html"
+)

@@ -27,7 +27,7 @@ must decrease, multipliers must be within 0..1).
 | `escalation_potential` | 25 | Could the relationship lead to more privilege, up to full administrative control | administrative probe, IAM write actions, assumable administrative roles |
 | `resource_sensitivity` | 20 | Sensitivity of what becomes reachable | declared bucket sensitivity, reach of a role |
 | `trust_boundary` | 15 | Does the relationship cross an account or anonymous boundary | trust-policy classification, bucket-policy principals |
-| `exposure` | 10 | How exposed the starting identity is | long-lived keys, console without MFA, external or anonymous caller, workload role |
+| `exposure` | 10 | How exposed the starting identity is | long-lived keys, console without MFA, external or anonymous caller, workload role, instance reachable from the internet |
 | `reachability` | 10 | How direct the relationship is | hop count of a path, paired permission requirements |
 
 Factor values are heuristics chosen per check and documented in each finding's `rationale` text.

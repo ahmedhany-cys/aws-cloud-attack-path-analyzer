@@ -27,11 +27,13 @@ instead of guessing.
 
 * The snapshot describes one account. Principals of other accounts appear as external nodes with
   unknown permissions; conclusions involving them are `hypothetical`.
-* Only IAM, S3 and Lambda are inventoried. EC2 instance profiles appear only as roles trusted by
-  `ec2.amazonaws.com`; the instances themselves, their network exposure and their metadata-service
-  configuration are unknown.
-* Lambda functions are collected for one region per scan; other regions must be scanned
-  separately and are otherwise reported as coverage gaps only if the snapshot declares them.
+* Only IAM, S3, Lambda and EC2 (instances, security groups, route tables) are inventoried. Other
+  compute and data services (ECS, EKS, RDS, DynamoDB, ...) are outside the snapshot schema.
+* Lambda functions, instances and security groups are collected for one region per scan; other
+  regions must be scanned separately and are otherwise reported as coverage gaps only if the
+  snapshot declares them.
+* The instance-profile → role mapping comes from the IAM listing; when IAM is not inventoried,
+  instances keep their profile ARN but no `role_arn`, and the collector records a coverage note.
 * Attached managed-policy documents must be present in the snapshot. Without them the affected
   principal's decisions are indeterminate and a coverage finding is raised.
 * Group membership, access keys, MFA and console state come from the snapshot as recorded; the
@@ -40,10 +42,17 @@ instead of guessing.
 
 ## Analysis limitations
 
-* **Reachability model.** Paths are built from `can-assume` and `executes-as` transitions. Permissions
-  that would allow changing configuration (`iam:PassRole`, policy modification, credential
-  creation, function code updates) are reported as findings in their own right and are not chained
-  into multi-step paths (see the scope decision in `docs/methodology.md`).
+* **Reachability model.** Paths are built from `can-assume`, `executes-as`, `runs-as` and
+  `network-exposed` transitions. Permissions that would allow changing configuration
+  (`iam:PassRole`, policy modification, credential creation, function code updates) are reported
+  as findings in their own right and are not chained into multi-step paths (see the scope decision
+  in `docs/methodology.md`).
+* **Network model.** Exposure is decided from security-group ingress, the public address and (when
+  known) the subnet's internet-gateway route. Network ACLs, egress rules, load balancers, VPC
+  peering, Transit Gateway, PrivateLink, host firewalls and the software actually listening on a
+  port are not modelled: an open port is reported as exposure, never as a confirmed vulnerability,
+  and every path through it is hypothetical. Security-group and prefix-list sources are not
+  resolved, so an instance reachable only through another resource's group is not reported.
 * **Bounded search.** Depth, per-pair and total path limits can truncate enumeration on large
   graphs; the report says when that happened.
 * **Administrative probe.** "Administrative" means all eight probed high-impact actions are allowed

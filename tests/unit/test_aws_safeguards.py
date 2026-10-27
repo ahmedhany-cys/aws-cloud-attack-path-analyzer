@@ -42,7 +42,7 @@ def _guarded_client(session, service):
 
 
 def test_allow_list_matches_the_specification():
-    assert set(READ_ONLY_OPERATIONS) == {"iam", "s3", "lambda", "sts"}
+    assert set(READ_ONLY_OPERATIONS) == {"iam", "s3", "lambda", "ec2", "sts"}
     assert READ_ONLY_OPERATIONS["iam"] == {
         "GetAccountAuthorizationDetails",
         "ListAccessKeys",
@@ -62,16 +62,21 @@ def test_allow_list_matches_the_specification():
         "GetBucketTagging",
     }
     assert READ_ONLY_OPERATIONS["lambda"] == {"ListFunctions", "GetPolicy", "ListTags"}
+    assert READ_ONLY_OPERATIONS["ec2"] == {
+        "DescribeInstances",
+        "DescribeSecurityGroups",
+        "DescribeRouteTables",
+    }
     assert READ_ONLY_OPERATIONS["sts"] == {"GetCallerIdentity"}
 
 
 def test_allow_list_is_frozen_and_contains_only_read_operations():
     with pytest.raises(TypeError):
-        READ_ONLY_OPERATIONS["ec2"] = frozenset({"DescribeInstances"})  # type: ignore[index]
+        READ_ONLY_OPERATIONS["rds"] = frozenset({"DescribeDBInstances"})  # type: ignore[index]
     for operations in READ_ONLY_OPERATIONS.values():
         assert isinstance(operations, frozenset)
         for operation in operations:
-            assert operation.startswith(("Get", "List")), operation
+            assert operation.startswith(("Get", "List", "Describe")), operation
 
 
 def test_allow_list_operations_exist_in_botocore_models():
@@ -110,7 +115,9 @@ def test_is_allowed_is_case_insensitive_on_service_id():
     assert is_allowed("S3", "ListBuckets")
     assert is_allowed("iam", "GetPolicy")
     assert not is_allowed("s3", "PutBucketPolicy")
-    assert not is_allowed("ec2", "DescribeInstances")
+    assert is_allowed("ec2", "DescribeInstances")
+    assert not is_allowed("ec2", "RunInstances")
+    assert not is_allowed("rds", "DescribeDBInstances")
 
 
 def test_safeguard_blocks_write_operation_before_any_http_request():
@@ -135,14 +142,19 @@ def test_safeguard_blocks_writes_on_every_service_it_covers():
         iam.delete_user(UserName="alice")
     with pytest.raises(SafeguardViolationError):
         lam.delete_function(FunctionName="fn")
+    ec2 = _guarded_client(session, "ec2")
+    with pytest.raises(SafeguardViolationError):
+        ec2.terminate_instances(InstanceIds=["i-0123456789abcdef0"])
+    with pytest.raises(SafeguardViolationError):
+        ec2.authorize_security_group_ingress(GroupId="sg-0123456789abcdef0")
 
 
 def test_safeguard_blocks_services_outside_the_allow_list_entirely():
     session = _session()
     install_safeguards(session)
-    ec2 = _guarded_client(session, "ec2")
+    rds = _guarded_client(session, "rds")
     with pytest.raises(SafeguardViolationError):
-        ec2.describe_instances()
+        rds.describe_db_instances()
 
 
 def test_safeguard_lets_allow_listed_operations_through_to_the_send_phase():

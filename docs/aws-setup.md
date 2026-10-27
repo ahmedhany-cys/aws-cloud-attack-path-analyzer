@@ -47,6 +47,9 @@ block below is kept identical to the code by a test.
       "Sid": "AttackPathReadOnlyInventory",
       "Effect": "Allow",
       "Action": [
+        "ec2:DescribeInstances",
+        "ec2:DescribeRouteTables",
+        "ec2:DescribeSecurityGroups",
         "iam:GetAccountAuthorizationDetails",
         "iam:GetLoginProfile",
         "iam:GetPolicy",
@@ -80,9 +83,12 @@ block below is kept identical to the code by a test.
 | IAM | `GetPolicy`, `GetPolicyVersion` | documents of attached or boundary policies missing from the listing |
 | S3 | `ListBuckets`; per bucket `GetBucketLocation`, `GetBucketPolicy`, `GetPublicAccessBlock`, `GetBucketAcl`, `GetBucketEncryption`, `GetBucketTagging` | bucket policies, Block Public Access, public ACL grants, encryption, sensitivity tags |
 | Lambda | `ListFunctions` (paginated, one region), `GetPolicy`, `ListTags` per function | execution roles and resource policies |
+| EC2 | `DescribeInstances`, `DescribeSecurityGroups`, `DescribeRouteTables` (paginated, one region) | public addresses, instance profiles, metadata-service settings, inbound rules, internet-gateway routing of instance subnets |
 
 `s3:GetBucketPolicyStatus` is allow-listed for a future snapshot field but is not called by the
-current collector.
+current collector. Instance profiles are mapped to roles through the IAM listing (no
+`iam:GetInstanceProfile` call); without the IAM inventory an instance keeps its profile ARN and the
+collector notes that its role is unknown.
 
 ## Running a scan
 
@@ -100,10 +106,11 @@ python -m attackpath analyze --input scans/<account-id>-<timestamp>.json --outpu
 python -m attackpath aws-scan --profile sandbox --region us-east-1 --confirm --analyze --report-dir reports/sandbox/
 ```
 
-Options: `--services iam,s3` to limit the inventory, `--output path.json` to choose the snapshot
-location, `--max-attempts N` for the throttling retry budget (exponential backoff 0.5 s → 20 s cap).
-Lambda functions are collected for the `--region` given; run once per region you use and
-analyze the snapshots separately (the coverage section records the region).
+Options: `--services iam,s3` to limit the inventory (default `iam,s3,lambda,ec2`), `--output
+path.json` to choose the snapshot location, `--max-attempts N` for the throttling retry budget
+(exponential backoff 0.5 s → 20 s cap). Lambda functions, instances and security groups are
+collected for the `--region` given; run once per region you use and analyze the snapshots
+separately (the coverage section records the region).
 
 ## What the snapshot contains
 
@@ -111,7 +118,9 @@ Everything `docs/input-format.md` describes: identities with their policies and 
 permissions boundaries, access-key ids and status, MFA and console state, managed-policy
 documents (including AWS-managed ones that are attached), buckets with policies, Block Public
 Access, ACL public flags, encryption and tags, functions with execution roles and resource
-policies, and a `coverage` section with per-service status and notes. Bucket sensitivity is
+policies, instances with their public address, state, security groups, instance-profile role,
+IMDSv2 setting and internet-gateway routing, security groups with their inbound rules, and a
+`coverage` section with per-service status and notes. Bucket sensitivity is
 derived from a `DataClassification` or `Sensitivity` tag (`high`/`medium`/`low`); buckets without
 one are `unknown` and are not reachability targets, so tag your sensitive buckets or edit the
 snapshot before analysis.

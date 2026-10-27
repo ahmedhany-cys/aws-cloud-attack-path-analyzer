@@ -114,6 +114,21 @@
         {"present": true, "check_id": "ADMIN", "principal_contains": "role/ops-admin-legacy", "note": "the role itself is still administrative; only the path to it was removed"},
         {"present": false, "check_id": "PATH-ADMIN"}
       ]
+    },
+    {
+      "name": "11-public-instance-path",
+      "fixture": "11-public-instance-path.json",
+      "description": "An internet-exposed jump host runs with a role that reads the PII bucket (a multi-service path), a web instance exposes SSH and allows IMDSv1, and a private worker produces no exposure finding.",
+      "expect": [
+        {"present": true, "check_id": "EC2-PUBLIC-EXPOSURE", "resource_contains": "i-0jump00000000000b", "min_severity": "high", "evidence_kind": "observed", "tag": "management-port", "note": "every port open to the internet on a host whose role reads PII"},
+        {"present": true, "check_id": "PATH-SENSITIVE", "resource_contains": "customer-pii-exports", "evidence_kind": "hypothetical", "min_severity": "medium", "max_severity": "high", "tag": "multi-service", "note": "the internet -> jump host -> instance role -> PII bucket; capped at high because the first hop assumes a compromise"},
+        {"present": true, "check_id": "EC2-PUBLIC-EXPOSURE", "resource_contains": "i-0web000000000000a", "tag": "management-port", "note": "SSH is open to the internet next to the web ports"},
+        {"present": true, "check_id": "EC2-IMDSV1", "resource_contains": "i-0web000000000000a", "principal_contains": "role/ec2-web-instance"},
+        {"present": true, "check_id": "SENSITIVE-ACCESS", "principal_contains": "role/ec2-jump-host-legacy", "resource_contains": "customer-pii-exports", "tag": "workload"},
+        {"present": false, "check_id": "EC2-PUBLIC-EXPOSURE", "resource_contains": "i-0batch0000000000c", "note": "private subnet and no public address"},
+        {"present": false, "check_id": "EC2-IMDSV1", "resource_contains": "i-0batch0000000000c", "note": "IMDSv2 is required on the worker"},
+        {"present": false, "check_id": "PATH-SENSITIVE", "principal_contains": "i-0jump00000000000b", "note": "instance -> own role -> bucket is the workload fact SENSITIVE-ACCESS reports"}
+      ]
     }
   ]
 }

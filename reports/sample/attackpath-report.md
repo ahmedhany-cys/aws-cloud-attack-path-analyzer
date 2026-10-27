@@ -11,32 +11,33 @@
 | Input | environment snapshot sample_environment.json |
 | Environment | synthetic-demo-account (synthetic) |
 | Account | `111111111111` |
-| Generated | 2026-10-27T14:24:11+00:00 |
+| Generated | 2026-10-27T19:20:23+00:00 |
 | Tool version | 0.1.0 |
-| Analysis time | 0.015 s |
-| Findings | 43 |
+| Analysis time | 0.016 s |
+| Findings | 49 |
 
 ### Findings by severity
 
 | Severity | Count |
 |---|---:|
-| CRITICAL | 3 |
-| HIGH | 20 |
-| MEDIUM | 10 |
-| LOW | 6 |
+| CRITICAL | 4 |
+| HIGH | 22 |
+| MEDIUM | 11 |
+| LOW | 8 |
 | INFORMATIONAL | 4 |
 
 ### Findings by category
 
 | Category | Count |
 |---|---:|
-| attack-path | 10 |
+| attack-path | 11 |
 | evaluation-limitation | 2 |
 | excessive-permissions | 5 |
 | inventory-coverage | 3 |
+| network-exposure | 4 |
 | privilege-escalation | 3 |
 | resource-exposure | 4 |
-| sensitive-data-access | 13 |
+| sensitive-data-access | 14 |
 | trust-relationship | 3 |
 
 ### Inventory
@@ -45,28 +46,32 @@
 |---|---:|
 | users | 5 |
 | groups | 1 |
-| roles | 9 |
+| roles | 10 |
 | managed_policies | 4 |
 | s3_buckets | 8 |
 | lambda_functions | 4 |
+| ec2_instances | 4 |
+| security_groups | 3 |
 | external_principals | 1 |
 
 ### Coverage
 
 | Service | Status | Notes |
 |---|---|---|
+| ec2 | complete |  |
 | iam | complete |  |
 | lambda | partial | region eu-west-1 was not inventoried: AccessDenied on lambda:ListFunctions |
 | s3 | complete |  |
 
 ### Graph
 
-38 nodes, 110 edges, 32 path(s) found.
+44 nodes, 120 edges, 35 path(s) found.
 
 ## Findings
 
 | Severity | ID | Title | Confidence | Evidence |
 |---|---|---|---|---|
+| CRITICAL | `APA-EC2-PUBLIC-EXPOSURE-6ab2178c` | Instance legacy-jump is reachable from the internet on all ports | high | observed |
 | CRITICAL | `APA-PATH-ADMIN-3c421bec` | User legacy-automation can reach role ops-admin-legacy in 1 step(s) | high | observed |
 | CRITICAL | `APA-TRUST-ANONYMOUS-ee839b9d` | Role vendor-support-access can be assumed by any AWS principal | high | observed |
 | CRITICAL | `APA-ADMIN-50535443` | Role ops-admin-legacy has administrative permissions | high | observed |
@@ -89,20 +94,25 @@
 | HIGH | `APA-PATH-SENSITIVE-faca7095` | Any AWS principal / anonymous can reach bucket finance-reports in 2 step(s) | high | inferred |
 | HIGH | `APA-SENSITIVE-ACCESS-3a387c3b` | Workload role lambda-image-resizer can delete/list/policy/read/write sensitive bucket finance-reports | high | observed |
 | HIGH | `APA-SENSITIVE-ACCESS-56cccbb6` | Workload role lambda-image-resizer can delete/list/policy/read/write sensitive bucket archive-with-restricted-policy | high | observed |
+| HIGH | `APA-EC2-IMDSV1-6e61c2c0` | Instance legacy-jump allows IMDSv1 while running as role ec2-jump-host-legacy | high | observed |
+| HIGH | `APA-EC2-PUBLIC-EXPOSURE-19b2357f` | Instance web-1 is reachable from the internet on tcp 22, tcp 80, tcp 443; management ports open: 22 (SSH) | high | observed |
 | HIGH | `APA-WILDCARD-a54d8e30` | Role vendor-support-access is granted s3:*, s3-object-lambda:* on * | high | observed |
 | MEDIUM | `APA-WILDCARD-1904629d` | Role lambda-image-resizer is granted s3:*, s3-object-lambda:* on * | high | observed |
 | MEDIUM | `APA-TRUST-CROSS-ACCOUNT-429c0891` | Role partner-integration trusts account arn:aws:iam::222222222222:root without an sts:ExternalId condition | high | observed |
 | MEDIUM | `APA-PATH-SENSITIVE-6eaeb196` | User legacy-automation can reach bucket customer-pii-exports in 2 step(s) | high | inferred |
 | MEDIUM | `APA-PATH-SENSITIVE-e5761861` | User legacy-automation can reach bucket legacy-backups in 2 step(s) | high | inferred |
-| MEDIUM | `APA-TRUST-CROSS-ACCOUNT-18919fa9` | Role third-party-monitoring trusts account arn:aws:iam::333333333333:root (sts:ExternalId required) | high | observed |
 | MEDIUM | `APA-S3-PUBLIC-POLICY-3be71d64` | Bucket public-marketing-assets is publicly accessible through its bucket policy | high | observed |
 | MEDIUM | `APA-PATH-SENSITIVE-0c050208` | User legacy-automation can reach bucket finance-reports in 2 step(s) | high | inferred |
 | MEDIUM | `APA-PATH-SENSITIVE-54bb74f1` | User legacy-automation can reach bucket archive-with-restricted-policy in 2 step(s) | high | inferred |
+| MEDIUM | `APA-SENSITIVE-ACCESS-ce12be1f` | Workload role ec2-jump-host-legacy can list/read sensitive bucket customer-pii-exports | high | observed |
 | MEDIUM | `APA-SENSITIVE-ACCESS-b5e322ff` | User analyst-readonly can list/read sensitive bucket legacy-backups | high | observed |
+| MEDIUM | `APA-PATH-SENSITIVE-25ec7c2a` | The internet can reach bucket customer-pii-exports in 3 step(s) | medium | hypothetical |
 | MEDIUM | `APA-SENSITIVE-ACCESS-f6e7f96d` | Role partner-integration can list/read sensitive bucket finance-reports | high | observed |
 | LOW | `APA-S3-PUBLIC-POLICY-5c783577` | Bucket archive-with-restricted-policy has a public bucket policy (blocked by Block Public Access) | high | observed |
 | LOW | `APA-SENSITIVE-ACCESS-340c7acd` | User analyst-readonly can list/read sensitive bucket finance-reports | high | observed |
 | LOW | `APA-SENSITIVE-ACCESS-92d0f375` | User analyst-readonly can list/read sensitive bucket archive-with-restricted-policy | high | observed |
+| LOW | `APA-EC2-IMDSV1-52ba8ac3` | Instance web-1 allows IMDSv1 while running as role ec2-web-instance | high | observed |
+| LOW | `APA-TRUST-CROSS-ACCOUNT-18919fa9` | Role third-party-monitoring trusts account arn:aws:iam::333333333333:root (sts:ExternalId required) | high | observed |
 | LOW | `APA-PATH-SENSITIVE-faae3510` | Account 222222222222 can reach bucket finance-reports in 2 step(s) | medium | hypothetical |
 | LOW | `APA-COVERAGE-UNRESOLVED-POLICY-724136a3` | Policy document arn:aws:iam::111111111111:policy/pipeline-unresolved is referenced but not present in the snapshot | high | observed |
 | LOW | `APA-COVERAGE-UNRESOLVED-ROLE-03574b40` | Execution role arn:aws:iam::111111111111:role/cleanup-role-missing is used by functions but not present in the snapshot | high | observed |
@@ -111,7 +121,91 @@
 | INFORMATIONAL | `APA-EVAL-INDETERMINATE-6f6938d6` | Statement could not be fully evaluated: trust:arn:aws:iam::111111111111:role/third-party-monitoring statement[0] | low | indeterminate |
 | INFORMATIONAL | `APA-COVERAGE-PARTIAL-923ec07b` | Inventory coverage for lambda is partial | high | observed |
 
-### CRITICAL (3)
+### CRITICAL (4)
+
+#### Instance legacy-jump is reachable from the internet on all ports
+
+| Field | Value |
+|---|---|
+| ID | `APA-EC2-PUBLIC-EXPOSURE-6ab2178c` |
+| Check | `EC2-PUBLIC-EXPOSURE` |
+| Category | network-exposure |
+| Severity | CRITICAL (score 86.5) |
+| Confidence | high |
+| Evidence kind | observed |
+| Resource | `arn:aws:ec2:us-east-1:111111111111:instance/i-0jump00000000000b` |
+| Tags | network, public-access, management-port |
+
+**Description.** i-0jump00000000000b has public address 203.0.113.25 and security group(s) sg-0jump000000000003 allow inbound all ports from any address. It runs as role ec2-jump-host-legacy (reach of the instance role: can access sensitive buckets: customer-pii-exports). IMDSv1 is still allowed, so a server-side request forgery or local file read is enough to retrieve the role credentials.
+
+**Impact.** Exposed management or database ports can be brute-forced or exploited directly, and any compromise of the instance yields its role credentials from the metadata service.
+
+**Evidence**
+
+- `security-group:sg-0jump000000000003`: ingress all ports from 0.0.0.0/0
+- `ec2:arn:aws:ec2:us-east-1:111111111111:instance/i-0jump00000000000b`: public IP 203.0.113.25, subnet routes to an internet gateway
+
+<details><summary>Score breakdown</summary>
+
+| Factor | Value | Weight | Rationale |
+|---|---:|---:|---|
+| permission_breadth | 0.70 | 20 | reach of the instance role: can access sensitive buckets: customer-pii-exports |
+| escalation_potential | 0.70 | 25 | the instance role reaches sensitive buckets |
+| resource_sensitivity | 1.00 | 20 | bucket sensitivity declared as high |
+| trust_boundary | 1.00 | 15 | reachable from any internet address |
+| exposure | 1.00 | 10 | every port is open to the internet |
+| reachability | 1.00 | 10 | direct |
+
+base 86.5 x evidence/confidence 1.00 x preconditions 1.00 = 86.5
+
+</details>
+
+**Remediation.** Remove the internet-wide ingress rules; reach the instance through SSM Session Manager or a VPN and keep only application ports behind a load balancer.
+
+1. Replace 0.0.0.0/0 and ::/0 sources with the specific CIDR ranges (or a managed prefix list) that need access.
+2. Use AWS Systems Manager Session Manager for shell access and delete the SSH/RDP rules.
+3. Serve application ports through an Application Load Balancer or CloudFront and move the instance to a private subnet.
+4. Require IMDSv2 (HttpTokens=required) and scope the instance role to what the workload needs.
+
+Suggested policy (template, validate before use):
+
+```json
+{
+  "IpPermissions": [
+    {
+      "IpProtocol": "tcp",
+      "FromPort": 22,
+      "ToPort": 22,
+      "IpRanges": [
+        {
+          "CidrIp": "<trusted-source-cidr>",
+          "Description": "replace with the range that needs access"
+        }
+      ]
+    }
+  ]
+}
+```
+
+Assumptions:
+
+- The suggested policy is a template: replace placeholder ARNs with the resources the workflow genuinely needs.
+- Validate the policy with IAM Access Analyzer policy checks and the policy simulator before deploying it; test in a non-production account first.
+- Legitimate functionality that depends on the removed permissions must be identified from usage data before the change is applied.
+- Removing an ingress rule interrupts any client that currently connects from the internet; confirm legitimate sources from VPC flow logs first.
+
+Verification:
+
+- aws ec2 describe-security-groups --group-ids sg-0jump000000000003 (expect no 0.0.0.0/0 or ::/0 source)
+- aws ec2 describe-instances --instance-ids i-0jump00000000000b --query 'Reservations[].Instances[].[PublicIpAddress,MetadataOptions.HttpTokens]'
+- Re-run the analyzer on a fresh snapshot and confirm that no EC2-PUBLIC-EXPOSURE finding remains for instance legacy-jump.
+
+References:
+
+- <https://docs.aws.amazon.com/vpc/latest/userguide/security-group-rules.html>
+- <https://docs.aws.amazon.com/systems-manager/latest/userguide/session-manager.html>
+- <https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/configuring-instance-metadata-service.html>
+- <https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/iam-roles-for-amazon-ec2.html>
 
 #### User legacy-automation can reach role ops-admin-legacy in 1 step(s)
 
@@ -330,7 +424,7 @@ References:
 - <https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_policies_evaluation-logic.html>
 - <https://docs.aws.amazon.com/IAM/latest/UserGuide/id_credentials_mfa.html>
 
-### HIGH (20)
+### HIGH (22)
 
 #### User legacy-automation may assume any role matching a broad pattern
 
@@ -481,7 +575,7 @@ References:
 | Principal | `arn:aws:iam::111111111111:user/ci-deployer` |
 | Tags | pass-role |
 
-**Description.** user ci-deployer holds iam:PassRole on a broad resource pattern (breadth 1.00) without an iam:PassedToService condition. It also holds service permissions that consume a passed role: lambda:CreateFunction (lambda.amazonaws.com). Roles in this snapshot that services can run under: ops-admin-legacy, lambda-image-resizer, lambda-thumbnailer-least-priv, ec2-web-instance; administrative among them: ops-admin-legacy.
+**Description.** user ci-deployer holds iam:PassRole on a broad resource pattern (breadth 1.00) without an iam:PassedToService condition. It also holds service permissions that consume a passed role: lambda:CreateFunction (lambda.amazonaws.com). Roles in this snapshot that services can run under: ops-admin-legacy, lambda-image-resizer, lambda-thumbnailer-least-priv, ec2-web-instance, ec2-jump-host-legacy; administrative among them: ops-admin-legacy.
 
 **Impact.** Passing a more privileged role to a service the identity controls lets a workload run with that role's permissions; the identity's effective privilege becomes that of the most privileged role any service will accept.
 
@@ -618,7 +712,7 @@ References:
 | Principal | `arn:aws:iam::111111111111:user/ci-deployer` |
 | Tags | workload-configuration |
 
-**Description.** user ci-deployer is allowed lambda:UpdateFunctionCode, lambda:UpdateFunctionConfiguration, lambda:CreateFunction on a broad function pattern. Function code runs with the function's execution role, so changing it changes who effectively holds that role's permissions. Functions whose roles are administrative or reach sensitive buckets: image-resizer (role lambda-image-resizer), thumbnailer (role lambda-thumbnailer-least-priv), public-webhook (role lambda-image-resizer).
+**Description.** user ci-deployer is allowed lambda:UpdateFunctionCode, lambda:UpdateFunctionConfiguration, lambda:CreateFunction on a broad function pattern. Function code runs with the function's execution role, so changing it changes who effectively holds that role's permissions. Functions whose roles are administrative or reach sensitive buckets: image-resizer (role lambda-image-resizer), public-webhook (role lambda-image-resizer).
 
 **Impact.** A deployment identity with unrestricted write access to functions effectively holds the union of all execution roles' permissions.
 
@@ -1897,6 +1991,152 @@ References:
 - <https://docs.aws.amazon.com/AmazonS3/latest/userguide/bucket-policies.html>
 - <https://docs.aws.amazon.com/lambda/latest/dg/lambda-intro-execution-role.html>
 
+#### Instance legacy-jump allows IMDSv1 while running as role ec2-jump-host-legacy
+
+| Field | Value |
+|---|---|
+| ID | `APA-EC2-IMDSV1-6e61c2c0` |
+| Check | `EC2-IMDSV1` |
+| Category | network-exposure |
+| Severity | HIGH (score 63.0) |
+| Confidence | high |
+| Evidence kind | observed |
+| Principal | `arn:aws:iam::111111111111:role/ec2-jump-host-legacy` |
+| Resource | `arn:aws:ec2:us-east-1:111111111111:instance/i-0jump00000000000b` |
+| Tags | network, imds, credential-exposure |
+
+**Description.** i-0jump00000000000b does not require session tokens for the instance metadata service (HttpTokens is optional), and it holds the credentials of role ec2-jump-host-legacy. A single unauthenticated GET to 169.254.169.254 from the instance returns those credentials; IMDSv2 requires a PUT-obtained token with a hop limit, which blocks the common SSRF and misconfigured-proxy cases. The instance is also reachable from the internet.
+
+**Impact.** Any request-forgery or local-file-read flaw in software on the instance becomes a direct path to its IAM role credentials.
+
+**Evidence**
+
+- `ec2:arn:aws:ec2:us-east-1:111111111111:instance/i-0jump00000000000b`: MetadataOptions.HttpTokens is optional; instance profile provides arn:aws:iam::111111111111:role/ec2-jump-host-legacy
+
+<details><summary>Score breakdown</summary>
+
+| Factor | Value | Weight | Rationale |
+|---|---:|---:|---|
+| permission_breadth | 0.70 | 20 | reach of the instance role: can access sensitive buckets: customer-pii-exports |
+| escalation_potential | 0.60 | 25 | role credentials retrievable by any SSRF or local request without a session token |
+| resource_sensitivity | 1.00 | 20 | bucket sensitivity declared as high |
+| trust_boundary | 0.00 | 15 | the metadata service is reachable only from the instance |
+| exposure | 0.80 | 10 | instance reachable from the internet |
+| reachability | 0.60 | 10 | requires a request-forgery or local-access flaw |
+
+base 63.0 x evidence/confidence 1.00 x preconditions 1.00 = 63.0
+
+</details>
+
+**Remediation.** Require IMDSv2 on the instance (HttpTokens=required) and enforce it for new launches.
+
+1. aws ec2 modify-instance-metadata-options --instance-id i-0jump00000000000b --http-tokens required --http-endpoint enabled
+2. Set MetadataOptions.HttpTokens=required in launch templates, and enable the account-level default (ec2 modify-instance-metadata-defaults).
+3. Confirm agents and SDKs on the instance support IMDSv2 before enforcing (modern AWS SDKs and the SSM agent do).
+
+Assumptions:
+
+- The suggested policy is a template: replace placeholder ARNs with the resources the workflow genuinely needs.
+- Validate the policy with IAM Access Analyzer policy checks and the policy simulator before deploying it; test in a non-production account first.
+- Legitimate functionality that depends on the removed permissions must be identified from usage data before the change is applied.
+- Software that still uses IMDSv1 calls loses credential access once tokens are required.
+
+Verification:
+
+- aws ec2 describe-instances --instance-ids i-0jump00000000000b --query 'Reservations[].Instances[].MetadataOptions' (expect HttpTokens=required)
+- Re-run the analyzer on a fresh snapshot and confirm that no EC2-IMDSV1 finding remains for instance legacy-jump.
+
+References:
+
+- <https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/configuring-instance-metadata-service.html>
+- <https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/iam-roles-for-amazon-ec2.html>
+
+#### Instance web-1 is reachable from the internet on tcp 22, tcp 80, tcp 443; management ports open: 22 (SSH)
+
+| Field | Value |
+|---|---|
+| ID | `APA-EC2-PUBLIC-EXPOSURE-19b2357f` |
+| Check | `EC2-PUBLIC-EXPOSURE` |
+| Category | network-exposure |
+| Severity | HIGH (score 62.2) |
+| Confidence | high |
+| Evidence kind | observed |
+| Resource | `arn:aws:ec2:us-east-1:111111111111:instance/i-0web000000000000a` |
+| Tags | network, public-access, management-port |
+
+**Description.** i-0web000000000000a has public address 203.0.113.10 and security group(s) sg-0web0000000000001 allow inbound tcp 22, tcp 80, tcp 443 from any address. It runs as role ec2-web-instance (reach of the instance role: estimated permission breadth 0.11). IMDSv1 is still allowed, so a server-side request forgery or local file read is enough to retrieve the role credentials.
+
+**Impact.** Exposed management or database ports can be brute-forced or exploited directly, and any compromise of the instance yields its role credentials from the metadata service.
+
+**Evidence**
+
+- `security-group:sg-0web0000000000001`: ingress tcp 80 from 0.0.0.0/0, ::/0
+- `security-group:sg-0web0000000000001`: ingress tcp 443 from 0.0.0.0/0, ::/0
+- `security-group:sg-0web0000000000001`: ingress tcp 22 from 0.0.0.0/0
+- `ec2:arn:aws:ec2:us-east-1:111111111111:instance/i-0web000000000000a`: public IP 203.0.113.10, subnet routes to an internet gateway
+
+<details><summary>Score breakdown</summary>
+
+| Factor | Value | Weight | Rationale |
+|---|---:|---:|---|
+| permission_breadth | 0.11 | 20 | reach of the instance role: estimated permission breadth 0.11 |
+| escalation_potential | 0.60 | 25 | an exposed management service offers a direct foothold on the host |
+| resource_sensitivity | 0.50 | 20 | the instance itself: compute and network foothold inside the VPC |
+| trust_boundary | 1.00 | 15 | reachable from any internet address |
+| exposure | 1.00 | 10 | management or database ports open to the internet: SSH |
+| reachability | 1.00 | 10 | direct |
+
+base 62.2 x evidence/confidence 1.00 x preconditions 1.00 = 62.2
+
+</details>
+
+**Remediation.** Remove the internet-wide ingress rules; reach the instance through SSM Session Manager or a VPN and keep only application ports behind a load balancer.
+
+1. Replace 0.0.0.0/0 and ::/0 sources with the specific CIDR ranges (or a managed prefix list) that need access.
+2. Use AWS Systems Manager Session Manager for shell access and delete the SSH/RDP rules.
+3. Serve application ports through an Application Load Balancer or CloudFront and move the instance to a private subnet.
+4. Require IMDSv2 (HttpTokens=required) and scope the instance role to what the workload needs.
+
+Suggested policy (template, validate before use):
+
+```json
+{
+  "IpPermissions": [
+    {
+      "IpProtocol": "tcp",
+      "FromPort": 22,
+      "ToPort": 22,
+      "IpRanges": [
+        {
+          "CidrIp": "<trusted-source-cidr>",
+          "Description": "replace with the range that needs access"
+        }
+      ]
+    }
+  ]
+}
+```
+
+Assumptions:
+
+- The suggested policy is a template: replace placeholder ARNs with the resources the workflow genuinely needs.
+- Validate the policy with IAM Access Analyzer policy checks and the policy simulator before deploying it; test in a non-production account first.
+- Legitimate functionality that depends on the removed permissions must be identified from usage data before the change is applied.
+- Removing an ingress rule interrupts any client that currently connects from the internet; confirm legitimate sources from VPC flow logs first.
+
+Verification:
+
+- aws ec2 describe-security-groups --group-ids sg-0web0000000000001 (expect no 0.0.0.0/0 or ::/0 source)
+- aws ec2 describe-instances --instance-ids i-0web000000000000a --query 'Reservations[].Instances[].[PublicIpAddress,MetadataOptions.HttpTokens]'
+- Re-run the analyzer on a fresh snapshot and confirm that no EC2-PUBLIC-EXPOSURE finding remains for instance web-1.
+
+References:
+
+- <https://docs.aws.amazon.com/vpc/latest/userguide/security-group-rules.html>
+- <https://docs.aws.amazon.com/systems-manager/latest/userguide/session-manager.html>
+- <https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/configuring-instance-metadata-service.html>
+- <https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/iam-roles-for-amazon-ec2.html>
+
 #### Role vendor-support-access is granted s3:*, s3-object-lambda:* on *
 
 | Field | Value |
@@ -1956,7 +2196,7 @@ References:
 - <https://docs.aws.amazon.com/IAM/latest/UserGuide/best-practices.html#grant-least-privilege>
 - <https://docs.aws.amazon.com/service-authorization/latest/reference/list_awsidentityandaccessmanagementiam.html>
 
-### MEDIUM (10)
+### MEDIUM (11)
 
 #### Role lambda-image-resizer is granted s3:*, s3-object-lambda:* on *
 
@@ -2030,7 +2270,7 @@ References:
 | Principal | `arn:aws:iam::111111111111:role/partner-integration` |
 | Tags | cross-account-trust, missing-external-id |
 
-**Description.** trust:arn:aws:iam::111111111111:role/partner-integration statement[0] allows arn:aws:iam::222222222222:root to assume the role. Trusting an entire account delegates the decision of who may assume the role to that account's administrators. The trusted account is declared as a known partner in the snapshot. What a caller gains: can access sensitive buckets: archive-with-restricted-policy, finance-reports, legacy-backups.
+**Description.** trust:arn:aws:iam::111111111111:role/partner-integration statement[0] allows arn:aws:iam::222222222222:root to assume the role. Trusting an entire account delegates the decision of who may assume the role to that account's administrators. The trusted account is declared as a known partner in the snapshot. What a caller gains: can access sensitive buckets: finance-reports.
 
 **Impact.** Principals in the trusted account can obtain this role's permissions; the security of this account then depends on the other account's identity management.
 
@@ -2047,8 +2287,8 @@ References:
 | Factor | Value | Weight | Rationale |
 |---|---:|---:|---|
 | permission_breadth | 0.12 | 20 | breadth of the role's own permissions |
-| escalation_potential | 0.70 | 25 | can access sensitive buckets: archive-with-restricted-policy, finance-reports, legacy-backups |
-| resource_sensitivity | 0.70 | 20 | can access sensitive buckets: archive-with-restricted-policy, finance-reports, legacy-backups |
+| escalation_potential | 0.70 | 25 | can access sensitive buckets: finance-reports |
+| resource_sensitivity | 0.70 | 20 | can access sensitive buckets: finance-reports |
 | trust_boundary | 0.80 | 15 | trust crosses an account boundary |
 | exposure | 0.60 | 10 | known partner account |
 | reachability | 1.00 | 10 | single sts:AssumeRole call |
@@ -2256,94 +2496,6 @@ References:
 - <https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_policies_evaluation-logic.html>
 - <https://docs.aws.amazon.com/IAM/latest/UserGuide/tutorial_cross-account-with-roles.html>
 - <https://docs.aws.amazon.com/IAM/latest/UserGuide/best-practices.html#grant-least-privilege>
-
-#### Role third-party-monitoring trusts account arn:aws:iam::333333333333:root (sts:ExternalId required)
-
-| Field | Value |
-|---|---|
-| ID | `APA-TRUST-CROSS-ACCOUNT-18919fa9` |
-| Check | `TRUST-CROSS-ACCOUNT` |
-| Category | trust-relationship |
-| Severity | MEDIUM (score 54.5) |
-| Confidence | high |
-| Evidence kind | observed |
-| Principal | `arn:aws:iam::111111111111:role/third-party-monitoring` |
-| Tags | cross-account-trust, external-id-required |
-
-**Description.** trust:arn:aws:iam::111111111111:role/third-party-monitoring statement[0] allows arn:aws:iam::333333333333:root to assume the role subject to conditions (StringEquals sts:ExternalId = [synthetic-external-id-0000]). Trusting an entire account delegates the decision of who may assume the role to that account's administrators. The trusted account is not declared as a known partner in the snapshot. What a caller gains: can access sensitive buckets: archive-with-restricted-policy, legacy-backups.
-
-**Impact.** Principals in the trusted account can obtain this role's permissions; the security of this account then depends on the other account's identity management.
-
-**Preconditions**
-
-- a principal in the trusted account must hold an identity-policy Allow for sts:AssumeRole on arn:aws:iam::111111111111:role/third-party-monitoring
-- the caller must present the configured sts:ExternalId
-
-**Evidence**
-
-- `trust:arn:aws:iam::111111111111:role/third-party-monitoring`: statement[0] names arn:aws:iam::333333333333:root with conditions StringEquals sts:ExternalId = [synthetic-external-id-0000]
-
-<details><summary>Score breakdown</summary>
-
-| Factor | Value | Weight | Rationale |
-|---|---:|---:|---|
-| permission_breadth | 0.17 | 20 | breadth of the role's own permissions |
-| escalation_potential | 0.70 | 25 | can access sensitive buckets: archive-with-restricted-policy, legacy-backups |
-| resource_sensitivity | 0.70 | 20 | can access sensitive buckets: archive-with-restricted-policy, legacy-backups |
-| trust_boundary | 0.80 | 15 | trust crosses an account boundary |
-| exposure | 0.80 | 10 | account not declared as a known partner |
-| reachability | 1.00 | 10 | single sts:AssumeRole call |
-
-base 64.9 x evidence/confidence 1.00 x preconditions 0.84 = 54.5
-
-</details>
-
-**Remediation.** Trust the specific external role rather than the account root, and require an sts:ExternalId for third-party access.
-
-1. Confirm with the owner of the trusted account which role or user needs access and why.
-2. Replace the account-root principal with that principal's ARN.
-3. For vendor or third-party access add a Condition with StringEquals sts:ExternalId set to a value only the vendor knows.
-4. Limit the role's own permissions to what the integration needs and set a short MaxSessionDuration.
-
-Suggested policy (template, validate before use):
-
-```json
-{
-  "Version": "2012-10-17",
-  "Statement": [
-    {
-      "Effect": "Allow",
-      "Principal": {
-        "AWS": "arn:aws:iam::<trusted-account-id>:role/<integration-role>"
-      },
-      "Action": "sts:AssumeRole",
-      "Condition": {
-        "StringEquals": {
-          "sts:ExternalId": "<unique-external-id>"
-        }
-      }
-    }
-  ]
-}
-```
-
-Assumptions:
-
-- The suggested policy is a template: replace placeholder ARNs with the resources the workflow genuinely needs.
-- Validate the policy with IAM Access Analyzer policy checks and the policy simulator before deploying it; test in a non-production account first.
-- Legitimate functionality that depends on the removed permissions must be identified from usage data before the change is applied.
-- The ExternalId condition is only meaningful for third parties; omit it for roles your own organization controls.
-
-Verification:
-
-- Confirm the trust policy: aws iam get-role --role-name third-party-monitoring --query Role.AssumeRolePolicyDocument
-- Re-run the analyzer on a fresh snapshot and confirm that no TRUST-CROSS-ACCOUNT finding remains for role third-party-monitoring.
-
-References:
-
-- <https://docs.aws.amazon.com/IAM/latest/UserGuide/tutorial_cross-account-with-roles.html>
-- <https://docs.aws.amazon.com/IAM/latest/UserGuide/id_roles_create_for-user_externalid.html>
-- <https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_policies_elements_principal.html>
 
 #### Bucket public-marketing-assets is publicly accessible through its bucket policy
 
@@ -2571,6 +2723,101 @@ References:
 - <https://docs.aws.amazon.com/IAM/latest/UserGuide/tutorial_cross-account-with-roles.html>
 - <https://docs.aws.amazon.com/IAM/latest/UserGuide/best-practices.html#grant-least-privilege>
 
+#### Workload role ec2-jump-host-legacy can list/read sensitive bucket customer-pii-exports
+
+| Field | Value |
+|---|---|
+| ID | `APA-SENSITIVE-ACCESS-ce12be1f` |
+| Check | `SENSITIVE-ACCESS` |
+| Category | sensitive-data-access |
+| Severity | MEDIUM (score 47.5) |
+| Confidence | high |
+| Evidence kind | observed |
+| Principal | `arn:aws:iam::111111111111:role/ec2-jump-host-legacy` |
+| Resource | `arn:aws:s3:::customer-pii-exports` |
+| Tags | sensitive-data, workload |
+
+**Description.** Workload role ec2-jump-host-legacy can perform list, read operations on customer-pii-exports (declared sensitivity: high). The role is assumed by AWS services (ec2.amazonaws.com); its permissions are only as safe as the code that runs under it.
+
+**Impact.** If this identity's credentials or code are compromised, the sensitive data in the bucket is readable without any further step.
+
+**Evidence**
+
+- `inline:arn:aws:iam::111111111111:role/ec2-jump-host-legacy:legacy-exports`: inline:arn:aws:iam::111111111111:role/ec2-jump-host-legacy:legacy-exports statement[0] (Allow) applies
+
+<details><summary>Score breakdown</summary>
+
+| Factor | Value | Weight | Rationale |
+|---|---:|---:|---|
+| permission_breadth | 0.50 | 20 | access classes: list, read |
+| escalation_potential | 0.10 | 25 | data access |
+| resource_sensitivity | 1.00 | 20 | bucket sensitivity declared as high |
+| trust_boundary | 0.00 | 15 | same account |
+| exposure | 0.50 | 10 | role; workload execution role |
+| reachability | 1.00 | 10 | direct permission |
+
+base 47.5 x evidence/confidence 1.00 x preconditions 1.00 = 47.5
+
+</details>
+
+**Remediation.** Grant the principal only the actions and object prefixes its workflow needs on this bucket, and deny the rest explicitly.
+
+1. Inventory the actions role ec2-jump-host-legacy actually uses (CloudTrail, IAM Access Analyzer policy generation, or IAM last-accessed information).
+2. Replace the broad statement with explicit actions scoped to the specific resource ARNs the workflow needs; keep separate statements per service.
+3. Add a permissions boundary to the principal if its policies are managed by delegated administrators.
+4. Roll the change out through infrastructure-as-code and review it before deployment.
+5. For workload roles, scope S3 access to the exact bucket and prefix the handler reads or writes.
+6. Consider a bucket policy that denies access from principals other than an allow-list (aws:PrincipalArn) for high-sensitivity data.
+
+Suggested policy (template, validate before use):
+
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": [
+        "s3:GetObject"
+      ],
+      "Resource": "arn:aws:s3:::<needed-bucket>/<needed-prefix>/*"
+    },
+    {
+      "Effect": "Allow",
+      "Action": [
+        "s3:ListBucket"
+      ],
+      "Resource": "arn:aws:s3:::<needed-bucket>",
+      "Condition": {
+        "StringLike": {
+          "s3:prefix": [
+            "<needed-prefix>/*"
+          ]
+        }
+      }
+    }
+  ]
+}
+```
+
+Assumptions:
+
+- The suggested policy is a template: replace placeholder ARNs with the resources the workflow genuinely needs.
+- Validate the policy with IAM Access Analyzer policy checks and the policy simulator before deploying it; test in a non-production account first.
+- Legitimate functionality that depends on the removed permissions must be identified from usage data before the change is applied.
+- Replace s3:GetObject with the write actions if the workflow writes, and remove ListBucket if listing is not required.
+
+Verification:
+
+- Simulate the permission with the IAM policy simulator (read-only): aws iam simulate-principal-policy --policy-source-arn arn:aws:iam::111111111111:role/ec2-jump-host-legacy --action-names s3:GetObject s3:PutObject --resource-arns arn:aws:s3:::customer-pii-exports/* ; expect implicitDeny or explicitDeny.
+- Re-run the analyzer on a fresh snapshot and confirm that no SENSITIVE-ACCESS finding remains for role ec2-jump-host-legacy on bucket customer-pii-exports.
+
+References:
+
+- <https://docs.aws.amazon.com/IAM/latest/UserGuide/best-practices.html#grant-least-privilege>
+- <https://docs.aws.amazon.com/AmazonS3/latest/userguide/bucket-policies.html>
+- <https://docs.aws.amazon.com/lambda/latest/dg/lambda-intro-execution-role.html>
+
 #### User analyst-readonly can list/read sensitive bucket legacy-backups
 
 | Field | Value |
@@ -2666,6 +2913,91 @@ References:
 - <https://docs.aws.amazon.com/IAM/latest/UserGuide/best-practices.html#grant-least-privilege>
 - <https://docs.aws.amazon.com/AmazonS3/latest/userguide/bucket-policies.html>
 
+#### The internet can reach bucket customer-pii-exports in 3 step(s)
+
+| Field | Value |
+|---|---|
+| ID | `APA-PATH-SENSITIVE-25ec7c2a` |
+| Check | `PATH-SENSITIVE` |
+| Category | attack-path |
+| Severity | MEDIUM (score 44.0) |
+| Confidence | medium |
+| Evidence kind | hypothetical |
+| Resource | `arn:aws:s3:::customer-pii-exports` |
+| Tags | reachability, multi-hop, network, multi-service |
+
+**Description.** the internet can reach bucket customer-pii-exports in 3 step(s): internet:the internet --[reachable on all ports]--&gt; ec2-instance:legacy-jump --[runs as]--&gt; role:ec2-jump-host-legacy --[s3 read, list]--&gt; s3-bucket:customer-pii-exports. Weakest evidence along the path: hypothetical; confidence: medium.
+
+**Impact.** Anyone on the internet who compromises a service on the exposed instance obtains the instance role's credentials from the metadata service and, from there, the sensitive data at the end of the path.
+
+**Preconditions**
+
+- a service listening on an exposed port must be exploitable or accept weak or leaked credentials
+
+**Evidence**
+
+- `security-group:sg-0jump000000000003`: ingress all ports from 0.0.0.0/0
+- `ec2:arn:aws:ec2:us-east-1:111111111111:instance/i-0jump00000000000b`: public IP 203.0.113.25, subnet routes to an internet gateway
+- `ec2:arn:aws:ec2:us-east-1:111111111111:instance/i-0jump00000000000b`: arn:aws:iam::111111111111:instance-profile/ec2-jump-host-legacy provides the credentials of arn:aws:iam::111111111111:role/ec2-jump-host-legacy
+- `inline:arn:aws:iam::111111111111:role/ec2-jump-host-legacy:legacy-exports`: inline:arn:aws:iam::111111111111:role/ec2-jump-host-legacy:legacy-exports statement[0] (Allow) applies
+
+**Path**
+
+```mermaid
+flowchart LR
+    n0["internet"]
+    n1["arn:aws:ec2:us-east-1:111111111111:instance/i-0jump00000000000b"]
+    n0 -- "reachable on all ports" --> n1
+    n2["arn:aws:iam::111111111111:role/ec2-jump-host-legacy"]
+    n1 -- "runs as" --> n2
+    n3["arn:aws:s3:::customer-pii-exports"]
+    n2 -- "s3 read, list" --> n3
+```
+
+1. `internet` -[reachable on all ports]-> `arn:aws:ec2:us-east-1:111111111111:instance/i-0jump00000000000b` (confidence medium)
+2. `arn:aws:ec2:us-east-1:111111111111:instance/i-0jump00000000000b` -[runs as]-> `arn:aws:iam::111111111111:role/ec2-jump-host-legacy` (confidence high)
+3. `arn:aws:iam::111111111111:role/ec2-jump-host-legacy` -[s3 read, list]-> `arn:aws:s3:::customer-pii-exports` (confidence high)
+
+<details><summary>Score breakdown</summary>
+
+| Factor | Value | Weight | Rationale |
+|---|---:|---:|---|
+| permission_breadth | 0.50 | 20 | access classes: list, read |
+| escalation_potential | 0.60 | 25 | a foothold on the instance yields its role credentials |
+| resource_sensitivity | 1.00 | 20 | bucket sensitivity declared as high |
+| trust_boundary | 1.00 | 15 | path starts outside any account |
+| exposure | 1.00 | 10 | reachable from any internet address |
+| reachability | 0.60 | 10 | 3 hop(s) |
+
+base 76.0 x evidence/confidence 0.63 x preconditions 0.92 = 44.0
+
+</details>
+
+**Remediation.** Break the path at its weakest hop; the first hop is usually the cheapest to fix.
+
+1. Restrict the security-group ingress of instance legacy-jump to known source ranges or remove its public address; use SSM Session Manager instead of exposed management ports.
+2. Reduce the permissions of instance role role ec2-jump-host-legacy to what instance legacy-jump needs, and require IMDSv2 so that its credentials cannot be read through SSRF.
+3. Scope role ec2-jump-host-legacy's S3 permissions (and the bucket policy of bucket customer-pii-exports) to the required prefix and actions.
+
+Assumptions:
+
+- The suggested policy is a template: replace placeholder ARNs with the resources the workflow genuinely needs.
+- Validate the policy with IAM Access Analyzer policy checks and the policy simulator before deploying it; test in a non-production account first.
+- Legitimate functionality that depends on the removed permissions must be identified from usage data before the change is applied.
+
+Verification:
+
+- Re-run the analyzer on a fresh snapshot and confirm that no PATH-SENSITIVE finding remains for the internet -&gt; bucket customer-pii-exports.
+- aws ec2 describe-instances --instance-ids i-0jump00000000000b --query 'Reservations[].Instances[].[PublicIpAddress,SecurityGroups,MetadataOptions.HttpTokens]' (expect no public address or no internet-wide ingress)
+
+References:
+
+- <https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_policies_evaluation-logic.html>
+- <https://docs.aws.amazon.com/IAM/latest/UserGuide/tutorial_cross-account-with-roles.html>
+- <https://docs.aws.amazon.com/IAM/latest/UserGuide/best-practices.html#grant-least-privilege>
+- <https://docs.aws.amazon.com/vpc/latest/userguide/security-group-rules.html>
+- <https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/configuring-instance-metadata-service.html>
+
 #### Role partner-integration can list/read sensitive bucket finance-reports
 
 | Field | Value |
@@ -2760,7 +3092,7 @@ References:
 - <https://docs.aws.amazon.com/IAM/latest/UserGuide/best-practices.html#grant-least-privilege>
 - <https://docs.aws.amazon.com/AmazonS3/latest/userguide/bucket-policies.html>
 
-### LOW (6)
+### LOW (8)
 
 #### Bucket archive-with-restricted-policy has a public bucket policy (blocked by Block Public Access)
 
@@ -3023,6 +3355,154 @@ References:
 
 - <https://docs.aws.amazon.com/IAM/latest/UserGuide/best-practices.html#grant-least-privilege>
 - <https://docs.aws.amazon.com/AmazonS3/latest/userguide/bucket-policies.html>
+
+#### Instance web-1 allows IMDSv1 while running as role ec2-web-instance
+
+| Field | Value |
+|---|---|
+| ID | `APA-EC2-IMDSV1-52ba8ac3` |
+| Check | `EC2-IMDSV1` |
+| Category | network-exposure |
+| Severity | LOW (score 35.2) |
+| Confidence | high |
+| Evidence kind | observed |
+| Principal | `arn:aws:iam::111111111111:role/ec2-web-instance` |
+| Resource | `arn:aws:ec2:us-east-1:111111111111:instance/i-0web000000000000a` |
+| Tags | network, imds, credential-exposure |
+
+**Description.** i-0web000000000000a does not require session tokens for the instance metadata service (HttpTokens is optional), and it holds the credentials of role ec2-web-instance. A single unauthenticated GET to 169.254.169.254 from the instance returns those credentials; IMDSv2 requires a PUT-obtained token with a hop limit, which blocks the common SSRF and misconfigured-proxy cases. The instance is also reachable from the internet.
+
+**Impact.** Any request-forgery or local-file-read flaw in software on the instance becomes a direct path to its IAM role credentials.
+
+**Evidence**
+
+- `ec2:arn:aws:ec2:us-east-1:111111111111:instance/i-0web000000000000a`: MetadataOptions.HttpTokens is optional; instance profile provides arn:aws:iam::111111111111:role/ec2-web-instance
+
+<details><summary>Score breakdown</summary>
+
+| Factor | Value | Weight | Rationale |
+|---|---:|---:|---|
+| permission_breadth | 0.11 | 20 | reach of the instance role: estimated permission breadth 0.11 |
+| escalation_potential | 0.60 | 25 | role credentials retrievable by any SSRF or local request without a session token |
+| resource_sensitivity | 0.20 | 20 | bucket sensitivity declared as low |
+| trust_boundary | 0.00 | 15 | the metadata service is reachable only from the instance |
+| exposure | 0.80 | 10 | instance reachable from the internet |
+| reachability | 0.60 | 10 | requires a request-forgery or local-access flaw |
+
+base 35.2 x evidence/confidence 1.00 x preconditions 1.00 = 35.2
+
+</details>
+
+**Remediation.** Require IMDSv2 on the instance (HttpTokens=required) and enforce it for new launches.
+
+1. aws ec2 modify-instance-metadata-options --instance-id i-0web000000000000a --http-tokens required --http-endpoint enabled
+2. Set MetadataOptions.HttpTokens=required in launch templates, and enable the account-level default (ec2 modify-instance-metadata-defaults).
+3. Confirm agents and SDKs on the instance support IMDSv2 before enforcing (modern AWS SDKs and the SSM agent do).
+
+Assumptions:
+
+- The suggested policy is a template: replace placeholder ARNs with the resources the workflow genuinely needs.
+- Validate the policy with IAM Access Analyzer policy checks and the policy simulator before deploying it; test in a non-production account first.
+- Legitimate functionality that depends on the removed permissions must be identified from usage data before the change is applied.
+- Software that still uses IMDSv1 calls loses credential access once tokens are required.
+
+Verification:
+
+- aws ec2 describe-instances --instance-ids i-0web000000000000a --query 'Reservations[].Instances[].MetadataOptions' (expect HttpTokens=required)
+- Re-run the analyzer on a fresh snapshot and confirm that no EC2-IMDSV1 finding remains for instance web-1.
+
+References:
+
+- <https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/configuring-instance-metadata-service.html>
+- <https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/iam-roles-for-amazon-ec2.html>
+
+#### Role third-party-monitoring trusts account arn:aws:iam::333333333333:root (sts:ExternalId required)
+
+| Field | Value |
+|---|---|
+| ID | `APA-TRUST-CROSS-ACCOUNT-18919fa9` |
+| Check | `TRUST-CROSS-ACCOUNT` |
+| Category | trust-relationship |
+| Severity | LOW (score 34.5) |
+| Confidence | high |
+| Evidence kind | observed |
+| Principal | `arn:aws:iam::111111111111:role/third-party-monitoring` |
+| Tags | cross-account-trust, external-id-required |
+
+**Description.** trust:arn:aws:iam::111111111111:role/third-party-monitoring statement[0] allows arn:aws:iam::333333333333:root to assume the role subject to conditions (StringEquals sts:ExternalId = [synthetic-external-id-0000]). Trusting an entire account delegates the decision of who may assume the role to that account's administrators. The trusted account is not declared as a known partner in the snapshot. What a caller gains: estimated permission breadth 0.17.
+
+**Impact.** Principals in the trusted account can obtain this role's permissions; the security of this account then depends on the other account's identity management.
+
+**Preconditions**
+
+- a principal in the trusted account must hold an identity-policy Allow for sts:AssumeRole on arn:aws:iam::111111111111:role/third-party-monitoring
+- the caller must present the configured sts:ExternalId
+
+**Evidence**
+
+- `trust:arn:aws:iam::111111111111:role/third-party-monitoring`: statement[0] names arn:aws:iam::333333333333:root with conditions StringEquals sts:ExternalId = [synthetic-external-id-0000]
+
+<details><summary>Score breakdown</summary>
+
+| Factor | Value | Weight | Rationale |
+|---|---:|---:|---|
+| permission_breadth | 0.17 | 20 | breadth of the role's own permissions |
+| escalation_potential | 0.17 | 25 | estimated permission breadth 0.17 |
+| resource_sensitivity | 0.17 | 20 | estimated permission breadth 0.17 |
+| trust_boundary | 0.80 | 15 | trust crosses an account boundary |
+| exposure | 0.80 | 10 | account not declared as a known partner |
+| reachability | 1.00 | 10 | single sts:AssumeRole call |
+
+base 41.0 x evidence/confidence 1.00 x preconditions 0.84 = 34.5
+
+</details>
+
+**Remediation.** Trust the specific external role rather than the account root, and require an sts:ExternalId for third-party access.
+
+1. Confirm with the owner of the trusted account which role or user needs access and why.
+2. Replace the account-root principal with that principal's ARN.
+3. For vendor or third-party access add a Condition with StringEquals sts:ExternalId set to a value only the vendor knows.
+4. Limit the role's own permissions to what the integration needs and set a short MaxSessionDuration.
+
+Suggested policy (template, validate before use):
+
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Principal": {
+        "AWS": "arn:aws:iam::<trusted-account-id>:role/<integration-role>"
+      },
+      "Action": "sts:AssumeRole",
+      "Condition": {
+        "StringEquals": {
+          "sts:ExternalId": "<unique-external-id>"
+        }
+      }
+    }
+  ]
+}
+```
+
+Assumptions:
+
+- The suggested policy is a template: replace placeholder ARNs with the resources the workflow genuinely needs.
+- Validate the policy with IAM Access Analyzer policy checks and the policy simulator before deploying it; test in a non-production account first.
+- Legitimate functionality that depends on the removed permissions must be identified from usage data before the change is applied.
+- The ExternalId condition is only meaningful for third parties; omit it for roles your own organization controls.
+
+Verification:
+
+- Confirm the trust policy: aws iam get-role --role-name third-party-monitoring --query Role.AssumeRolePolicyDocument
+- Re-run the analyzer on a fresh snapshot and confirm that no TRUST-CROSS-ACCOUNT finding remains for role third-party-monitoring.
+
+References:
+
+- <https://docs.aws.amazon.com/IAM/latest/UserGuide/tutorial_cross-account-with-roles.html>
+- <https://docs.aws.amazon.com/IAM/latest/UserGuide/id_roles_create_for-user_externalid.html>
+- <https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_policies_elements_principal.html>
 
 #### Account 222222222222 can reach bucket finance-reports in 2 step(s)
 

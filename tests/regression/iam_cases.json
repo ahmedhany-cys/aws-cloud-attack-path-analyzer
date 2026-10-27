@@ -1,0 +1,1934 @@
+{
+  "description": "IAM policy-evaluation regression corpus. Expected outcomes come from the AWS documentation cited in each case, not from this project's evaluator. Accounts 111111111111 (analyzed) and 222222222222 (other) are synthetic. A null context value means the key is known to be absent from the request; a missing key means its value is unknown. See docs/iam-regression-cases.md.",
+  "cases": [
+    {
+      "id": "deny-overrides-allow-identity",
+      "title": "An explicit Deny in an identity policy overrides an Allow in the same identity policy",
+      "area": "evaluation-order",
+      "source": {
+        "url": "https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_policies_evaluation-logic_policy-eval-denyallow.html",
+        "rule": "If the enforcement code finds even one explicit Deny that applies to the request, the final decision is Deny regardless of any Allow statements."
+      },
+      "environment": {
+        "users": [
+          {
+            "name": "alice",
+            "inline_policies": {
+              "inline": {
+                "Version": "2012-10-17",
+                "Statement": [
+                  {
+                    "Effect": "Allow",
+                    "Action": "s3:*",
+                    "Resource": "*"
+                  },
+                  {
+                    "Effect": "Deny",
+                    "Action": "s3:GetObject",
+                    "Resource": "arn:aws:s3:::data/*"
+                  }
+                ]
+              }
+            }
+          }
+        ]
+      },
+      "request": {
+        "principal": "arn:aws:iam::111111111111:user/alice",
+        "action": "s3:GetObject",
+        "resource": "arn:aws:s3:::data/report.csv"
+      },
+      "expected": "explicit_deny",
+      "status": "confirmed",
+      "simulator": {
+        "supported": true
+      }
+    },
+    {
+      "id": "deny-in-resource-policy-overrides-identity-allow",
+      "title": "An explicit Deny in a bucket policy overrides an Allow in the caller's identity policy",
+      "area": "evaluation-order",
+      "source": {
+        "url": "https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_policies_evaluation-logic.html",
+        "rule": "When identity-based and resource-based policies are evaluated together, an explicit deny in either of them overrides the allow."
+      },
+      "environment": {
+        "users": [
+          {
+            "name": "alice",
+            "inline_policies": {
+              "inline": {
+                "Version": "2012-10-17",
+                "Statement": [
+                  {
+                    "Effect": "Allow",
+                    "Action": "s3:GetObject",
+                    "Resource": "arn:aws:s3:::data/*"
+                  }
+                ]
+              }
+            }
+          }
+        ],
+        "s3_buckets": [
+          {
+            "name": "data",
+            "bucket_policy": {
+              "Version": "2012-10-17",
+              "Statement": [
+                {
+                  "Effect": "Deny",
+                  "Principal": "*",
+                  "Action": "s3:GetObject",
+                  "Resource": "arn:aws:s3:::data/*"
+                }
+              ]
+            }
+          }
+        ]
+      },
+      "request": {
+        "principal": "arn:aws:iam::111111111111:user/alice",
+        "action": "s3:GetObject",
+        "resource": "arn:aws:s3:::data/report.csv"
+      },
+      "resource_policy_of": "data",
+      "expected": "explicit_deny",
+      "status": "confirmed",
+      "simulator": {
+        "supported": true
+      }
+    },
+    {
+      "id": "implicit-deny-when-no-statement-matches",
+      "title": "A request that no statement allows is implicitly denied",
+      "area": "evaluation-order",
+      "source": {
+        "url": "https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_policies_evaluation-logic_policy-eval-denyallow.html",
+        "rule": "By default all requests are implicitly denied; a request must be explicitly allowed by an applicable policy to be allowed."
+      },
+      "environment": {
+        "users": [
+          {
+            "name": "alice",
+            "inline_policies": {
+              "inline": {
+                "Version": "2012-10-17",
+                "Statement": [
+                  {
+                    "Effect": "Allow",
+                    "Action": "s3:GetObject",
+                    "Resource": "arn:aws:s3:::data/*"
+                  }
+                ]
+              }
+            }
+          }
+        ]
+      },
+      "request": {
+        "principal": "arn:aws:iam::111111111111:user/alice",
+        "action": "s3:PutObject",
+        "resource": "arn:aws:s3:::data/report.csv"
+      },
+      "expected": "implicit_deny",
+      "status": "confirmed",
+      "simulator": {
+        "supported": true
+      }
+    },
+    {
+      "id": "action-prefix-wildcard-via-group-policy",
+      "title": "s3:Get* in a group policy matches s3:GetObject for a member of the group",
+      "area": "wildcards",
+      "source": {
+        "url": "https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_policies_elements_action.html",
+        "rule": "Wildcards (* and ?) can be used as part of an action name, so s3:Get* applies to every S3 action whose name starts with Get."
+      },
+      "environment": {
+        "users": [
+          {
+            "name": "alice",
+            "groups": [
+              "readers"
+            ]
+          }
+        ],
+        "groups": [
+          {
+            "name": "readers",
+            "inline_policies": {
+              "read": {
+                "Version": "2012-10-17",
+                "Statement": [
+                  {
+                    "Effect": "Allow",
+                    "Action": "s3:Get*",
+                    "Resource": "arn:aws:s3:::data/*"
+                  }
+                ]
+              }
+            }
+          }
+        ]
+      },
+      "request": {
+        "principal": "arn:aws:iam::111111111111:user/alice",
+        "action": "s3:GetObject",
+        "resource": "arn:aws:s3:::data/report.csv"
+      },
+      "expected": "allowed",
+      "status": "confirmed",
+      "simulator": {
+        "supported": true,
+        "note": "Group policies are passed in PolicyInputList together with the user's own policies; the simulator has no notion of group membership."
+      }
+    },
+    {
+      "id": "service-wildcard-via-managed-policy",
+      "title": "s3:* in an attached managed policy matches any S3 action",
+      "area": "wildcards",
+      "source": {
+        "url": "https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_policies_elements_action.html",
+        "rule": "An Action element of s3:* applies to all S3 actions."
+      },
+      "environment": {
+        "users": [
+          {
+            "name": "alice",
+            "attached_policies": [
+              "arn:aws:iam::111111111111:policy/S3FullAccess"
+            ]
+          }
+        ],
+        "managed_policies": [
+          {
+            "arn": "arn:aws:iam::111111111111:policy/S3FullAccess",
+            "document": {
+              "Version": "2012-10-17",
+              "Statement": [
+                {
+                  "Effect": "Allow",
+                  "Action": "s3:*",
+                  "Resource": "*"
+                }
+              ]
+            }
+          }
+        ]
+      },
+      "request": {
+        "principal": "arn:aws:iam::111111111111:user/alice",
+        "action": "s3:DeleteBucket",
+        "resource": "arn:aws:s3:::data"
+      },
+      "expected": "allowed",
+      "status": "confirmed",
+      "simulator": {
+        "supported": true
+      }
+    },
+    {
+      "id": "full-wildcard-matches-any-action",
+      "title": "Action * with Resource * matches an action of any service",
+      "area": "wildcards",
+      "source": {
+        "url": "https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_policies_elements_action.html",
+        "rule": "The multi-character wildcard * matches any combination of characters in an action name, so a bare * matches every action of every service."
+      },
+      "environment": {
+        "users": [
+          {
+            "name": "alice",
+            "inline_policies": {
+              "inline": {
+                "Version": "2012-10-17",
+                "Statement": [
+                  {
+                    "Effect": "Allow",
+                    "Action": "*",
+                    "Resource": "*"
+                  }
+                ]
+              }
+            }
+          }
+        ]
+      },
+      "request": {
+        "principal": "arn:aws:iam::111111111111:user/alice",
+        "action": "iam:CreateUser",
+        "resource": "arn:aws:iam::111111111111:user/newbie"
+      },
+      "expected": "allowed",
+      "status": "confirmed",
+      "simulator": {
+        "supported": true
+      }
+    },
+    {
+      "id": "action-matching-is-case-insensitive",
+      "title": "S3:GETOBJECT in the policy matches the request action s3:GetObject",
+      "area": "wildcards",
+      "source": {
+        "url": "https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_policies_elements_action.html",
+        "rule": "The service prefix and the action name are case insensitive, so iam:ListAccessKeys is the same as IAM:listaccesskeys."
+      },
+      "environment": {
+        "users": [
+          {
+            "name": "alice",
+            "inline_policies": {
+              "inline": {
+                "Version": "2012-10-17",
+                "Statement": [
+                  {
+                    "Effect": "Allow",
+                    "Action": "S3:GETOBJECT",
+                    "Resource": "arn:aws:s3:::data/*"
+                  }
+                ]
+              }
+            }
+          }
+        ]
+      },
+      "request": {
+        "principal": "arn:aws:iam::111111111111:user/alice",
+        "action": "s3:GetObject",
+        "resource": "arn:aws:s3:::data/report.csv"
+      },
+      "expected": "allowed",
+      "status": "confirmed",
+      "simulator": {
+        "supported": true
+      }
+    },
+    {
+      "id": "resource-wildcards-match-within-and-across-segments",
+      "title": "? matches one character and * expands across slashes in the resource part of an ARN",
+      "area": "wildcards",
+      "source": {
+        "url": "https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_policies_elements_resource.html",
+        "rule": "In a resource ARN ? matches any single character and * matches any combination of characters, including the forward slash, within the resource segment."
+      },
+      "environment": {
+        "users": [
+          {
+            "name": "alice",
+            "inline_policies": {
+              "inline": {
+                "Version": "2012-10-17",
+                "Statement": [
+                  {
+                    "Effect": "Allow",
+                    "Action": "s3:GetObject",
+                    "Resource": "arn:aws:s3:::data/reports/20??/*"
+                  }
+                ]
+              }
+            }
+          }
+        ]
+      },
+      "request": {
+        "principal": "arn:aws:iam::111111111111:user/alice",
+        "action": "s3:GetObject",
+        "resource": "arn:aws:s3:::data/reports/2026/q1/summary.csv"
+      },
+      "expected": "allowed",
+      "status": "confirmed",
+      "simulator": {
+        "supported": true
+      }
+    },
+    {
+      "id": "notaction-allow-grants-unlisted-action",
+      "title": "Allow with NotAction iam:* grants an S3 action",
+      "area": "not-elements",
+      "source": {
+        "url": "https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_policies_elements_notaction.html",
+        "rule": "NotAction matches everything except the listed actions, so with the Allow effect every applicable action that is not listed is allowed."
+      },
+      "environment": {
+        "users": [
+          {
+            "name": "alice",
+            "inline_policies": {
+              "inline": {
+                "Version": "2012-10-17",
+                "Statement": [
+                  {
+                    "Effect": "Allow",
+                    "NotAction": "iam:*",
+                    "Resource": "*"
+                  }
+                ]
+              }
+            }
+          }
+        ]
+      },
+      "request": {
+        "principal": "arn:aws:iam::111111111111:user/alice",
+        "action": "s3:GetObject",
+        "resource": "arn:aws:s3:::data/report.csv"
+      },
+      "expected": "allowed",
+      "status": "confirmed",
+      "simulator": {
+        "supported": true
+      }
+    },
+    {
+      "id": "notaction-deny-denies-unlisted-action",
+      "title": "Deny with NotAction s3:GetObject explicitly denies s3:PutObject",
+      "area": "not-elements",
+      "source": {
+        "url": "https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_policies_elements_notaction.html",
+        "rule": "With the Deny effect, NotAction explicitly denies every action that is not listed while leaving the listed actions unaffected."
+      },
+      "environment": {
+        "users": [
+          {
+            "name": "alice",
+            "inline_policies": {
+              "inline": {
+                "Version": "2012-10-17",
+                "Statement": [
+                  {
+                    "Effect": "Allow",
+                    "Action": "s3:*",
+                    "Resource": "*"
+                  },
+                  {
+                    "Effect": "Deny",
+                    "NotAction": "s3:GetObject",
+                    "Resource": "*"
+                  }
+                ]
+              }
+            }
+          }
+        ]
+      },
+      "request": {
+        "principal": "arn:aws:iam::111111111111:user/alice",
+        "action": "s3:PutObject",
+        "resource": "arn:aws:s3:::data/report.csv"
+      },
+      "expected": "explicit_deny",
+      "status": "confirmed",
+      "simulator": {
+        "supported": true
+      }
+    },
+    {
+      "id": "notresource-allow-grants-unlisted-resource",
+      "title": "Allow with NotResource secret/* grants access to an object in another bucket",
+      "area": "not-elements",
+      "source": {
+        "url": "https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_policies_elements_notresource.html",
+        "rule": "NotResource matches every resource except those specified, so an Allow applies to all resources that are not listed."
+      },
+      "environment": {
+        "users": [
+          {
+            "name": "alice",
+            "inline_policies": {
+              "inline": {
+                "Version": "2012-10-17",
+                "Statement": [
+                  {
+                    "Effect": "Allow",
+                    "Action": "s3:GetObject",
+                    "NotResource": "arn:aws:s3:::secret/*"
+                  }
+                ]
+              }
+            }
+          }
+        ]
+      },
+      "request": {
+        "principal": "arn:aws:iam::111111111111:user/alice",
+        "action": "s3:GetObject",
+        "resource": "arn:aws:s3:::data/report.csv"
+      },
+      "expected": "allowed",
+      "status": "confirmed",
+      "simulator": {
+        "supported": true
+      }
+    },
+    {
+      "id": "notresource-deny-denies-unlisted-resource",
+      "title": "Deny s3:* with NotResource data explicitly denies objects outside the data bucket",
+      "area": "not-elements",
+      "source": {
+        "url": "https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_policies_elements_notresource.html",
+        "rule": "Using NotResource with the Deny effect explicitly denies access to every resource that is not listed, without granting the listed ones."
+      },
+      "environment": {
+        "users": [
+          {
+            "name": "alice",
+            "inline_policies": {
+              "inline": {
+                "Version": "2012-10-17",
+                "Statement": [
+                  {
+                    "Effect": "Allow",
+                    "Action": "s3:*",
+                    "Resource": "*"
+                  },
+                  {
+                    "Effect": "Deny",
+                    "Action": "s3:*",
+                    "NotResource": [
+                      "arn:aws:s3:::data",
+                      "arn:aws:s3:::data/*"
+                    ]
+                  }
+                ]
+              }
+            }
+          }
+        ]
+      },
+      "request": {
+        "principal": "arn:aws:iam::111111111111:user/alice",
+        "action": "s3:GetObject",
+        "resource": "arn:aws:s3:::other/file.txt"
+      },
+      "expected": "explicit_deny",
+      "status": "confirmed",
+      "simulator": {
+        "supported": true
+      }
+    },
+    {
+      "id": "boundary-not-allowing-action-is-implicit-deny",
+      "title": "Identity policy allows everything but the boundary allows only S3: iam:CreateUser is implicitly denied",
+      "area": "boundary",
+      "source": {
+        "url": "https://docs.aws.amazon.com/IAM/latest/UserGuide/access_policies_boundaries.html",
+        "rule": "An entity may perform only the actions allowed by both its identity-based policies and its permissions boundary; a boundary that does not allow the action results in an implicit deny."
+      },
+      "environment": {
+        "users": [
+          {
+            "name": "alice",
+            "inline_policies": {
+              "inline": {
+                "Version": "2012-10-17",
+                "Statement": [
+                  {
+                    "Effect": "Allow",
+                    "Action": "*",
+                    "Resource": "*"
+                  }
+                ]
+              }
+            },
+            "permissions_boundary": "arn:aws:iam::111111111111:policy/boundary"
+          }
+        ],
+        "managed_policies": [
+          {
+            "arn": "arn:aws:iam::111111111111:policy/boundary",
+            "document": {
+              "Version": "2012-10-17",
+              "Statement": [
+                {
+                  "Effect": "Allow",
+                  "Action": "s3:*",
+                  "Resource": "*"
+                }
+              ]
+            }
+          }
+        ]
+      },
+      "request": {
+        "principal": "arn:aws:iam::111111111111:user/alice",
+        "action": "iam:CreateUser",
+        "resource": "arn:aws:iam::111111111111:user/newbie"
+      },
+      "expected": "implicit_deny",
+      "status": "confirmed",
+      "simulator": {
+        "supported": true
+      }
+    },
+    {
+      "id": "boundary-explicit-deny-is-explicit-deny",
+      "title": "An explicit Deny in the permissions boundary overrides the identity policy Allow",
+      "area": "boundary",
+      "source": {
+        "url": "https://docs.aws.amazon.com/IAM/latest/UserGuide/access_policies_boundaries.html",
+        "rule": "The effective permissions are the intersection of identity-based policies and the boundary, and an explicit deny in either of them overrides the allow."
+      },
+      "environment": {
+        "users": [
+          {
+            "name": "alice",
+            "inline_policies": {
+              "inline": {
+                "Version": "2012-10-17",
+                "Statement": [
+                  {
+                    "Effect": "Allow",
+                    "Action": "s3:*",
+                    "Resource": "*"
+                  }
+                ]
+              }
+            },
+            "permissions_boundary": "arn:aws:iam::111111111111:policy/boundary"
+          }
+        ],
+        "managed_policies": [
+          {
+            "arn": "arn:aws:iam::111111111111:policy/boundary",
+            "document": {
+              "Version": "2012-10-17",
+              "Statement": [
+                {
+                  "Effect": "Allow",
+                  "Action": "s3:*",
+                  "Resource": "*"
+                },
+                {
+                  "Effect": "Deny",
+                  "Action": "s3:DeleteObject",
+                  "Resource": "*"
+                }
+              ]
+            }
+          }
+        ]
+      },
+      "request": {
+        "principal": "arn:aws:iam::111111111111:user/alice",
+        "action": "s3:DeleteObject",
+        "resource": "arn:aws:s3:::data/report.csv"
+      },
+      "expected": "explicit_deny",
+      "status": "confirmed",
+      "simulator": {
+        "supported": true
+      }
+    },
+    {
+      "id": "boundary-alone-grants-nothing",
+      "title": "A permissions boundary that allows S3 does not grant S3 access to a user without identity policies",
+      "area": "boundary",
+      "source": {
+        "url": "https://docs.aws.amazon.com/IAM/latest/UserGuide/access_policies_boundaries.html",
+        "rule": "A policy used as a permissions boundary limits the user's permissions but does not provide permissions on its own."
+      },
+      "environment": {
+        "users": [
+          {
+            "name": "alice",
+            "permissions_boundary": "arn:aws:iam::111111111111:policy/boundary"
+          }
+        ],
+        "managed_policies": [
+          {
+            "arn": "arn:aws:iam::111111111111:policy/boundary",
+            "document": {
+              "Version": "2012-10-17",
+              "Statement": [
+                {
+                  "Effect": "Allow",
+                  "Action": "s3:*",
+                  "Resource": "*"
+                }
+              ]
+            }
+          }
+        ]
+      },
+      "request": {
+        "principal": "arn:aws:iam::111111111111:user/alice",
+        "action": "s3:GetObject",
+        "resource": "arn:aws:s3:::data/report.csv"
+      },
+      "expected": "implicit_deny",
+      "status": "confirmed",
+      "simulator": {
+        "supported": true
+      }
+    },
+    {
+      "id": "same-account-resource-policy-alone-allows-named-user",
+      "title": "A same-account bucket policy naming the user ARN grants access without any identity policy",
+      "area": "resource-policy",
+      "source": {
+        "url": "https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_policies_evaluation-logic_policy-eval-denyallow.html",
+        "rule": "Within the same account, resource-based policies that grant permissions to an IAM user ARN are not limited by an implicit deny in an identity-based policy."
+      },
+      "environment": {
+        "users": [
+          {
+            "name": "alice"
+          }
+        ],
+        "s3_buckets": [
+          {
+            "name": "data",
+            "bucket_policy": {
+              "Version": "2012-10-17",
+              "Statement": [
+                {
+                  "Effect": "Allow",
+                  "Principal": {
+                    "AWS": "arn:aws:iam::111111111111:user/alice"
+                  },
+                  "Action": "s3:GetObject",
+                  "Resource": "arn:aws:s3:::data/*"
+                }
+              ]
+            }
+          }
+        ]
+      },
+      "request": {
+        "principal": "arn:aws:iam::111111111111:user/alice",
+        "action": "s3:GetObject",
+        "resource": "arn:aws:s3:::data/report.csv"
+      },
+      "resource_policy_of": "data",
+      "expected": "allowed",
+      "status": "confirmed",
+      "simulator": {
+        "supported": true
+      }
+    },
+    {
+      "id": "same-account-identity-policy-alone-allows",
+      "title": "A same-account identity policy grants access even though the bucket policy names only another user",
+      "area": "resource-policy",
+      "source": {
+        "url": "https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_policies_evaluation-logic.html",
+        "rule": "Within the same account the permissions are the union of identity-based and resource-based policies: if an action is allowed by either one, AWS allows the action."
+      },
+      "environment": {
+        "users": [
+          {
+            "name": "alice",
+            "inline_policies": {
+              "inline": {
+                "Version": "2012-10-17",
+                "Statement": [
+                  {
+                    "Effect": "Allow",
+                    "Action": "s3:GetObject",
+                    "Resource": "arn:aws:s3:::data/*"
+                  }
+                ]
+              }
+            }
+          },
+          {
+            "name": "bob"
+          }
+        ],
+        "s3_buckets": [
+          {
+            "name": "data",
+            "bucket_policy": {
+              "Version": "2012-10-17",
+              "Statement": [
+                {
+                  "Effect": "Allow",
+                  "Principal": {
+                    "AWS": "arn:aws:iam::111111111111:user/bob"
+                  },
+                  "Action": "s3:GetObject",
+                  "Resource": "arn:aws:s3:::data/*"
+                }
+              ]
+            }
+          }
+        ]
+      },
+      "request": {
+        "principal": "arn:aws:iam::111111111111:user/alice",
+        "action": "s3:GetObject",
+        "resource": "arn:aws:s3:::data/report.csv"
+      },
+      "resource_policy_of": "data",
+      "expected": "allowed",
+      "status": "confirmed",
+      "simulator": {
+        "supported": true
+      }
+    },
+    {
+      "id": "cross-account-resource-policy-alone-is-implicit-deny",
+      "title": "A bucket policy in another account naming the user is not enough without an identity policy Allow",
+      "area": "resource-policy",
+      "source": {
+        "url": "https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_policies_evaluation-logic-cross-account.html",
+        "rule": "For a cross-account request the identity-based policy in the trusted account and the resource-based policy in the trusting account must both allow it; the request is allowed only if both evaluations return Allow."
+      },
+      "environment": {
+        "users": [
+          {
+            "name": "alice"
+          }
+        ],
+        "s3_buckets": [
+          {
+            "name": "partner",
+            "account_id": "222222222222",
+            "bucket_policy": {
+              "Version": "2012-10-17",
+              "Statement": [
+                {
+                  "Effect": "Allow",
+                  "Principal": {
+                    "AWS": "arn:aws:iam::111111111111:user/alice"
+                  },
+                  "Action": "s3:GetObject",
+                  "Resource": "arn:aws:s3:::partner/*"
+                }
+              ]
+            }
+          }
+        ]
+      },
+      "request": {
+        "principal": "arn:aws:iam::111111111111:user/alice",
+        "action": "s3:GetObject",
+        "resource": "arn:aws:s3:::partner/report.csv"
+      },
+      "resource_policy_of": "partner",
+      "expected": "implicit_deny",
+      "status": "confirmed",
+      "simulator": {
+        "supported": true
+      }
+    },
+    {
+      "id": "cross-account-identity-policy-alone-is-implicit-deny",
+      "title": "An identity policy Allow is not enough when the other account's bucket policy does not grant the caller",
+      "area": "resource-policy",
+      "source": {
+        "url": "https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_policies_evaluation-logic-cross-account.html",
+        "rule": "For a cross-account request the resource-based policy in the trusting account must allow the requester in addition to the identity-based policy in the trusted account."
+      },
+      "environment": {
+        "users": [
+          {
+            "name": "alice",
+            "inline_policies": {
+              "inline": {
+                "Version": "2012-10-17",
+                "Statement": [
+                  {
+                    "Effect": "Allow",
+                    "Action": "s3:GetObject",
+                    "Resource": "arn:aws:s3:::partner/*"
+                  }
+                ]
+              }
+            }
+          }
+        ],
+        "s3_buckets": [
+          {
+            "name": "partner",
+            "account_id": "222222222222",
+            "bucket_policy": {
+              "Version": "2012-10-17",
+              "Statement": [
+                {
+                  "Effect": "Allow",
+                  "Principal": {
+                    "AWS": "arn:aws:iam::222222222222:user/carol"
+                  },
+                  "Action": "s3:GetObject",
+                  "Resource": "arn:aws:s3:::partner/*"
+                }
+              ]
+            }
+          }
+        ]
+      },
+      "request": {
+        "principal": "arn:aws:iam::111111111111:user/alice",
+        "action": "s3:GetObject",
+        "resource": "arn:aws:s3:::partner/report.csv"
+      },
+      "resource_policy_of": "partner",
+      "expected": "implicit_deny",
+      "status": "confirmed",
+      "simulator": {
+        "supported": true
+      }
+    },
+    {
+      "id": "cross-account-both-sides-allow",
+      "title": "Identity policy Allow plus a bucket policy delegating to the caller's account allows the cross-account request",
+      "area": "resource-policy",
+      "source": {
+        "url": "https://docs.aws.amazon.com/IAM/latest/UserGuide/access_policies-cross-account-resource-access.html",
+        "rule": "In cross-account access a principal needs an Allow in the identity policy and in the resource-based policy; a resource policy naming the account root delegates access to the account, whose identity policies then grant it."
+      },
+      "environment": {
+        "users": [
+          {
+            "name": "alice",
+            "inline_policies": {
+              "inline": {
+                "Version": "2012-10-17",
+                "Statement": [
+                  {
+                    "Effect": "Allow",
+                    "Action": "s3:GetObject",
+                    "Resource": "arn:aws:s3:::partner/*"
+                  }
+                ]
+              }
+            }
+          }
+        ],
+        "s3_buckets": [
+          {
+            "name": "partner",
+            "account_id": "222222222222",
+            "bucket_policy": {
+              "Version": "2012-10-17",
+              "Statement": [
+                {
+                  "Effect": "Allow",
+                  "Principal": {
+                    "AWS": "arn:aws:iam::111111111111:root"
+                  },
+                  "Action": "s3:GetObject",
+                  "Resource": "arn:aws:s3:::partner/*"
+                }
+              ]
+            }
+          }
+        ]
+      },
+      "request": {
+        "principal": "arn:aws:iam::111111111111:user/alice",
+        "action": "s3:GetObject",
+        "resource": "arn:aws:s3:::partner/report.csv"
+      },
+      "resource_policy_of": "partner",
+      "expected": "allowed",
+      "status": "confirmed",
+      "simulator": {
+        "supported": true
+      }
+    },
+    {
+      "id": "stringequals-and-stringequalsignorecase-match",
+      "title": "StringEquals matches an exact value and StringEqualsIgnoreCase matches regardless of case",
+      "area": "conditions",
+      "source": {
+        "url": "https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_policies_elements_condition_operators.html",
+        "rule": "StringEquals performs exact, case-sensitive matching and StringEqualsIgnoreCase performs exact matching ignoring case; multiple condition operators are combined with a logical AND."
+      },
+      "environment": {
+        "users": [
+          {
+            "name": "alice",
+            "inline_policies": {
+              "inline": {
+                "Version": "2012-10-17",
+                "Statement": [
+                  {
+                    "Effect": "Allow",
+                    "Action": "s3:GetObject",
+                    "Resource": "arn:aws:s3:::data/*",
+                    "Condition": {
+                      "StringEquals": {
+                        "aws:RequestedRegion": "us-east-1"
+                      },
+                      "StringEqualsIgnoreCase": {
+                        "aws:PrincipalTag/env": "Prod"
+                      }
+                    }
+                  }
+                ]
+              }
+            },
+            "tags": {
+              "env": "prod"
+            }
+          }
+        ]
+      },
+      "request": {
+        "principal": "arn:aws:iam::111111111111:user/alice",
+        "action": "s3:GetObject",
+        "resource": "arn:aws:s3:::data/report.csv",
+        "context": {
+          "aws:RequestedRegion": "us-east-1"
+        }
+      },
+      "expected": "allowed",
+      "status": "confirmed",
+      "simulator": {
+        "supported": true
+      }
+    },
+    {
+      "id": "stringnotequals-deny-applies-when-value-differs",
+      "title": "A Deny conditioned on StringNotEquals aws:RequestedRegion applies to a request for another Region",
+      "area": "conditions",
+      "source": {
+        "url": "https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_policies_elements_condition_operators.html",
+        "rule": "StringNotEquals is negated matching: the condition is true when the request value does not equal the policy value."
+      },
+      "environment": {
+        "users": [
+          {
+            "name": "alice",
+            "inline_policies": {
+              "inline": {
+                "Version": "2012-10-17",
+                "Statement": [
+                  {
+                    "Effect": "Allow",
+                    "Action": "s3:*",
+                    "Resource": "*"
+                  },
+                  {
+                    "Effect": "Deny",
+                    "Action": "s3:*",
+                    "Resource": "*",
+                    "Condition": {
+                      "StringNotEquals": {
+                        "aws:RequestedRegion": "us-east-1"
+                      }
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        ]
+      },
+      "request": {
+        "principal": "arn:aws:iam::111111111111:user/alice",
+        "action": "s3:GetObject",
+        "resource": "arn:aws:s3:::data/report.csv",
+        "context": {
+          "aws:RequestedRegion": "eu-west-1"
+        }
+      },
+      "expected": "explicit_deny",
+      "status": "confirmed",
+      "simulator": {
+        "supported": true
+      }
+    },
+    {
+      "id": "stringlike-star-and-question-mark-wildcards",
+      "title": "StringLike proj-?lph* matches the principal tag value proj-alpha",
+      "area": "conditions",
+      "source": {
+        "url": "https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_policies_elements_condition_operators.html",
+        "rule": "StringLike is case-sensitive matching whose values can include multi-character (*) and single-character (?) wildcards anywhere in the string."
+      },
+      "environment": {
+        "users": [
+          {
+            "name": "alice",
+            "inline_policies": {
+              "inline": {
+                "Version": "2012-10-17",
+                "Statement": [
+                  {
+                    "Effect": "Allow",
+                    "Action": "s3:GetObject",
+                    "Resource": "arn:aws:s3:::data/*",
+                    "Condition": {
+                      "StringLike": {
+                        "aws:PrincipalTag/project": "proj-?lph*"
+                      }
+                    }
+                  }
+                ]
+              }
+            },
+            "tags": {
+              "project": "proj-alpha"
+            }
+          }
+        ]
+      },
+      "request": {
+        "principal": "arn:aws:iam::111111111111:user/alice",
+        "action": "s3:GetObject",
+        "resource": "arn:aws:s3:::data/report.csv"
+      },
+      "expected": "allowed",
+      "status": "confirmed",
+      "simulator": {
+        "supported": true
+      }
+    },
+    {
+      "id": "bool-and-numericlessthanequals-mfa-session",
+      "title": "Bool aws:MultiFactorAuthPresent true with NumericLessThanEquals aws:MultiFactorAuthAge 3600 matches a fresh MFA session",
+      "area": "conditions",
+      "source": {
+        "url": "https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_policies_elements_condition_operators.html",
+        "rule": "Bool matches a boolean value and NumericLessThanEquals matches when the request value is less than or equal to the policy value; both operators in one Condition must match."
+      },
+      "environment": {
+        "users": [
+          {
+            "name": "alice",
+            "inline_policies": {
+              "inline": {
+                "Version": "2012-10-17",
+                "Statement": [
+                  {
+                    "Effect": "Allow",
+                    "Action": "s3:GetObject",
+                    "Resource": "arn:aws:s3:::data/*",
+                    "Condition": {
+                      "Bool": {
+                        "aws:MultiFactorAuthPresent": "true"
+                      },
+                      "NumericLessThanEquals": {
+                        "aws:MultiFactorAuthAge": "3600"
+                      }
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        ]
+      },
+      "request": {
+        "principal": "arn:aws:iam::111111111111:user/alice",
+        "action": "s3:GetObject",
+        "resource": "arn:aws:s3:::data/report.csv",
+        "context": {
+          "aws:MultiFactorAuthPresent": "true",
+          "aws:MultiFactorAuthAge": "1800"
+        }
+      },
+      "expected": "allowed",
+      "status": "confirmed",
+      "simulator": {
+        "supported": true
+      }
+    },
+    {
+      "id": "null-true-matches-absent-key",
+      "title": "Null aws:TokenIssueTime true matches a request made without temporary credentials",
+      "area": "conditions",
+      "source": {
+        "url": "https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_policies_elements_condition_operators.html#Conditions_Null",
+        "rule": "The Null condition operator with the value true matches when the condition key does not exist in the request context."
+      },
+      "environment": {
+        "users": [
+          {
+            "name": "alice",
+            "inline_policies": {
+              "inline": {
+                "Version": "2012-10-17",
+                "Statement": [
+                  {
+                    "Effect": "Allow",
+                    "Action": "s3:GetObject",
+                    "Resource": "arn:aws:s3:::data/*",
+                    "Condition": {
+                      "Null": {
+                        "aws:TokenIssueTime": "true"
+                      }
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        ]
+      },
+      "request": {
+        "principal": "arn:aws:iam::111111111111:user/alice",
+        "action": "s3:GetObject",
+        "resource": "arn:aws:s3:::data/report.csv",
+        "context": {
+          "aws:TokenIssueTime": null
+        }
+      },
+      "expected": "allowed",
+      "status": "confirmed",
+      "simulator": {
+        "supported": true,
+        "note": "A null context value in the corpus means the key is absent; the validator omits the ContextEntry for it."
+      }
+    },
+    {
+      "id": "null-false-does-not-match-absent-key",
+      "title": "Null aws:TokenIssueTime false does not match a request made without temporary credentials",
+      "area": "conditions",
+      "source": {
+        "url": "https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_policies_elements_condition_operators.html#Conditions_Null",
+        "rule": "The Null condition operator with the value false matches only when the key exists in the request context and its value is not null."
+      },
+      "environment": {
+        "users": [
+          {
+            "name": "alice",
+            "inline_policies": {
+              "inline": {
+                "Version": "2012-10-17",
+                "Statement": [
+                  {
+                    "Effect": "Allow",
+                    "Action": "s3:GetObject",
+                    "Resource": "arn:aws:s3:::data/*",
+                    "Condition": {
+                      "Null": {
+                        "aws:TokenIssueTime": "false"
+                      }
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        ]
+      },
+      "request": {
+        "principal": "arn:aws:iam::111111111111:user/alice",
+        "action": "s3:GetObject",
+        "resource": "arn:aws:s3:::data/report.csv",
+        "context": {
+          "aws:TokenIssueTime": null
+        }
+      },
+      "expected": "implicit_deny",
+      "status": "confirmed",
+      "simulator": {
+        "supported": true,
+        "note": "A null context value in the corpus means the key is absent; the validator omits the ContextEntry for it."
+      }
+    },
+    {
+      "id": "ipaddress-allow-and-notipaddress-deny-inside-cidr",
+      "title": "An address inside 203.0.113.0/24 satisfies IpAddress and does not trigger the NotIpAddress Deny",
+      "area": "conditions",
+      "source": {
+        "url": "https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_policies_elements_condition_operators.html#Conditions_IPAddress",
+        "rule": "IpAddress matches the specified IP address or CIDR range and NotIpAddress matches all addresses except the specified range."
+      },
+      "environment": {
+        "users": [
+          {
+            "name": "alice",
+            "inline_policies": {
+              "inline": {
+                "Version": "2012-10-17",
+                "Statement": [
+                  {
+                    "Effect": "Allow",
+                    "Action": "s3:GetObject",
+                    "Resource": "arn:aws:s3:::data/*",
+                    "Condition": {
+                      "IpAddress": {
+                        "aws:SourceIp": "203.0.113.0/24"
+                      }
+                    }
+                  },
+                  {
+                    "Effect": "Deny",
+                    "Action": "s3:*",
+                    "Resource": "*",
+                    "Condition": {
+                      "NotIpAddress": {
+                        "aws:SourceIp": "203.0.113.0/24"
+                      }
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        ]
+      },
+      "request": {
+        "principal": "arn:aws:iam::111111111111:user/alice",
+        "action": "s3:GetObject",
+        "resource": "arn:aws:s3:::data/report.csv",
+        "context": {
+          "aws:SourceIp": "203.0.113.7"
+        }
+      },
+      "expected": "allowed",
+      "status": "confirmed",
+      "simulator": {
+        "supported": true
+      }
+    },
+    {
+      "id": "dategreaterthan-matches-later-time",
+      "title": "DateGreaterThan aws:CurrentTime 2026-01-01T00:00:00Z matches a request made in June 2026",
+      "area": "conditions",
+      "source": {
+        "url": "https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_policies_elements_condition_operators.html#Conditions_Date",
+        "rule": "DateGreaterThan matches when the request date/time is after the specified date and time (ISO 8601 or epoch values)."
+      },
+      "environment": {
+        "users": [
+          {
+            "name": "alice",
+            "inline_policies": {
+              "inline": {
+                "Version": "2012-10-17",
+                "Statement": [
+                  {
+                    "Effect": "Allow",
+                    "Action": "s3:GetObject",
+                    "Resource": "arn:aws:s3:::data/*",
+                    "Condition": {
+                      "DateGreaterThan": {
+                        "aws:CurrentTime": "2026-01-01T00:00:00Z"
+                      }
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        ]
+      },
+      "request": {
+        "principal": "arn:aws:iam::111111111111:user/alice",
+        "action": "s3:GetObject",
+        "resource": "arn:aws:s3:::data/report.csv",
+        "context": {
+          "aws:CurrentTime": "2026-06-15T12:00:00Z"
+        }
+      },
+      "expected": "allowed",
+      "status": "confirmed",
+      "simulator": {
+        "supported": true
+      }
+    },
+    {
+      "id": "ifexists-absent-key-evaluates-true",
+      "title": "BoolIfExists aws:MultiFactorAuthPresent false in a Deny applies when the key is absent",
+      "area": "conditions",
+      "source": {
+        "url": "https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_policies_elements_condition_operators.html#Conditions_IfExists",
+        "rule": "With an ...IfExists operator the key is processed as specified when present and the condition element evaluates to true when the key is not present."
+      },
+      "environment": {
+        "users": [
+          {
+            "name": "alice",
+            "inline_policies": {
+              "inline": {
+                "Version": "2012-10-17",
+                "Statement": [
+                  {
+                    "Effect": "Allow",
+                    "Action": "s3:*",
+                    "Resource": "*"
+                  },
+                  {
+                    "Effect": "Deny",
+                    "Action": "*",
+                    "Resource": "*",
+                    "Condition": {
+                      "BoolIfExists": {
+                        "aws:MultiFactorAuthPresent": "false"
+                      }
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        ]
+      },
+      "request": {
+        "principal": "arn:aws:iam::111111111111:user/alice",
+        "action": "s3:GetObject",
+        "resource": "arn:aws:s3:::data/report.csv",
+        "context": {
+          "aws:MultiFactorAuthPresent": null
+        }
+      },
+      "expected": "explicit_deny",
+      "status": "confirmed",
+      "simulator": {
+        "supported": true,
+        "note": "A null context value in the corpus means the key is absent; the validator omits the ContextEntry for it."
+      }
+    },
+    {
+      "id": "forallvalues-stringequals-subset-matches",
+      "title": "ForAllValues:StringEquals matches when every requested tag key is in the policy list",
+      "area": "conditions",
+      "source": {
+        "url": "https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_policies_condition-single-vs-multi-valued-context-keys.html",
+        "rule": "ForAllValues returns true if every context key value in the request matches a context key value in the policy."
+      },
+      "environment": {
+        "users": [
+          {
+            "name": "alice",
+            "inline_policies": {
+              "inline": {
+                "Version": "2012-10-17",
+                "Statement": [
+                  {
+                    "Effect": "Allow",
+                    "Action": "ec2:CreateTags",
+                    "Resource": "arn:aws:ec2:us-east-1:111111111111:instance/*",
+                    "Condition": {
+                      "ForAllValues:StringEquals": {
+                        "aws:TagKeys": [
+                          "environment",
+                          "cost-center"
+                        ]
+                      }
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        ]
+      },
+      "request": {
+        "principal": "arn:aws:iam::111111111111:user/alice",
+        "action": "ec2:CreateTags",
+        "resource": "arn:aws:ec2:us-east-1:111111111111:instance/i-0123456789abcdef0",
+        "context": {
+          "aws:TagKeys": [
+            "environment"
+          ]
+        }
+      },
+      "expected": "allowed",
+      "status": "confirmed",
+      "simulator": {
+        "supported": true
+      }
+    },
+    {
+      "id": "foranyvalue-stringequals-one-match",
+      "title": "ForAnyValue:StringEquals matches when at least one requested tag key is in the policy list",
+      "area": "conditions",
+      "source": {
+        "url": "https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_policies_condition-single-vs-multi-valued-context-keys.html",
+        "rule": "ForAnyValue returns true if any one of the context key values in the request matches any one of the context key values in the policy."
+      },
+      "environment": {
+        "users": [
+          {
+            "name": "alice",
+            "inline_policies": {
+              "inline": {
+                "Version": "2012-10-17",
+                "Statement": [
+                  {
+                    "Effect": "Allow",
+                    "Action": "ec2:CreateTags",
+                    "Resource": "arn:aws:ec2:us-east-1:111111111111:instance/*",
+                    "Condition": {
+                      "ForAnyValue:StringEquals": {
+                        "aws:TagKeys": [
+                          "environment",
+                          "cost-center"
+                        ]
+                      }
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        ]
+      },
+      "request": {
+        "principal": "arn:aws:iam::111111111111:user/alice",
+        "action": "ec2:CreateTags",
+        "resource": "arn:aws:ec2:us-east-1:111111111111:instance/i-0123456789abcdef0",
+        "context": {
+          "aws:TagKeys": [
+            "environment",
+            "dept"
+          ]
+        }
+      },
+      "expected": "allowed",
+      "status": "confirmed",
+      "simulator": {
+        "supported": true
+      }
+    },
+    {
+      "id": "unknown-request-key-is-indeterminate",
+      "title": "A condition on aws:SourceVpce cannot be decided without a request-time value",
+      "area": "conditions",
+      "source": {
+        "url": "https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_policies_condition-keys.html#condition-keys-sourcevpce",
+        "rule": "aws:SourceVpce is included in the request context only if the requester uses a VPC endpoint, so the outcome depends on the request: the Allow applies when the key equals the policy value and the request is implicitly denied when the key is absent or different."
+      },
+      "environment": {
+        "users": [
+          {
+            "name": "alice",
+            "inline_policies": {
+              "inline": {
+                "Version": "2012-10-17",
+                "Statement": [
+                  {
+                    "Effect": "Allow",
+                    "Action": "s3:GetObject",
+                    "Resource": "arn:aws:s3:::data/*",
+                    "Condition": {
+                      "StringEquals": {
+                        "aws:SourceVpce": "vpce-0123456789abcdef0"
+                      }
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        ]
+      },
+      "request": {
+        "principal": "arn:aws:iam::111111111111:user/alice",
+        "action": "s3:GetObject",
+        "resource": "arn:aws:s3:::data/report.csv"
+      },
+      "expected": "indeterminate",
+      "status": "confirmed",
+      "simulator": {
+        "supported": false,
+        "note": "The simulator has no indeterminate outcome: without a ContextEntry for aws:SourceVpce it reports implicitDeny and lists the key under MissingContextValues; with a value it reports allowed or implicitDeny. Supply a value to simulate one branch."
+      }
+    },
+    {
+      "id": "forallvalues-absent-key-evaluates-true",
+      "title": "ForAllValues:StringEquals evaluates to true when the request carries no aws:TagKeys",
+      "area": "conditions",
+      "source": {
+        "url": "https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_policies_condition-single-vs-multi-valued-context-keys.html",
+        "rule": "ForAllValues also returns true if there are no context keys in the request, which is why AWS recommends pairing it with a Null false check."
+      },
+      "environment": {
+        "users": [
+          {
+            "name": "alice",
+            "inline_policies": {
+              "inline": {
+                "Version": "2012-10-17",
+                "Statement": [
+                  {
+                    "Effect": "Allow",
+                    "Action": "ec2:CreateTags",
+                    "Resource": "arn:aws:ec2:us-east-1:111111111111:instance/*",
+                    "Condition": {
+                      "ForAllValues:StringEquals": {
+                        "aws:TagKeys": [
+                          "environment",
+                          "cost-center"
+                        ]
+                      }
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        ]
+      },
+      "request": {
+        "principal": "arn:aws:iam::111111111111:user/alice",
+        "action": "ec2:CreateTags",
+        "resource": "arn:aws:ec2:us-east-1:111111111111:instance/i-0123456789abcdef0",
+        "context": {
+          "aws:TagKeys": null
+        }
+      },
+      "expected": "allowed",
+      "status": "confirmed",
+      "simulator": {
+        "supported": true,
+        "note": "A null context value in the corpus means the key is absent; the validator omits the ContextEntry for it."
+      }
+    },
+    {
+      "id": "negated-operator-with-absent-key-is-true",
+      "title": "StringNotEquals aws:SourceVpce in a Deny applies to a request that carries no aws:SourceVpce",
+      "area": "conditions",
+      "source": {
+        "url": "https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_policies_elements_condition_operators.html",
+        "rule": "If the policy condition requires that the key is not matched (StringNotEquals, StringNotLike, ArnNotLike, ...) and the key is not present in the request context, the condition is true."
+      },
+      "environment": {
+        "users": [
+          {
+            "name": "alice",
+            "inline_policies": {
+              "inline": {
+                "Version": "2012-10-17",
+                "Statement": [
+                  {
+                    "Effect": "Allow",
+                    "Action": "s3:*",
+                    "Resource": "*"
+                  },
+                  {
+                    "Effect": "Deny",
+                    "Action": "s3:*",
+                    "Resource": "*",
+                    "Condition": {
+                      "StringNotEquals": {
+                        "aws:SourceVpce": "vpce-0123456789abcdef0"
+                      }
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        ]
+      },
+      "request": {
+        "principal": "arn:aws:iam::111111111111:user/alice",
+        "action": "s3:GetObject",
+        "resource": "arn:aws:s3:::data/report.csv",
+        "context": {
+          "aws:SourceVpce": null
+        }
+      },
+      "expected": "explicit_deny",
+      "status": "confirmed",
+      "simulator": {
+        "supported": true,
+        "note": "A null context value in the corpus means the key is absent; the validator omits the ContextEntry for it."
+      }
+    },
+    {
+      "id": "username-variable-in-resource-matches-own-prefix",
+      "title": "${aws:username} in the Resource element resolves to the calling user's name",
+      "area": "policy-variables",
+      "source": {
+        "url": "https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_policies_variables.html",
+        "rule": "When the policy is evaluated, policy variables are replaced with values from the request context, so ${aws:username} in a Resource ARN matches only the caller's own prefix."
+      },
+      "environment": {
+        "users": [
+          {
+            "name": "alice",
+            "inline_policies": {
+              "inline": {
+                "Version": "2012-10-17",
+                "Statement": [
+                  {
+                    "Effect": "Allow",
+                    "Action": "s3:GetObject",
+                    "Resource": "arn:aws:s3:::home/${aws:username}/*"
+                  }
+                ]
+              }
+            }
+          }
+        ]
+      },
+      "request": {
+        "principal": "arn:aws:iam::111111111111:user/alice",
+        "action": "s3:GetObject",
+        "resource": "arn:aws:s3:::home/alice/notes.txt"
+      },
+      "expected": "allowed",
+      "status": "confirmed",
+      "simulator": {
+        "supported": true,
+        "note": "aws:username is supplied as a ContextEntry from the principal's name so the simulator can resolve the variable."
+      }
+    },
+    {
+      "id": "principaltag-variable-in-resource",
+      "title": "${aws:PrincipalTag/team} in the Resource element resolves to the caller's team tag",
+      "area": "policy-variables",
+      "source": {
+        "url": "https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_policies_variables.html",
+        "rule": "${aws:PrincipalTag/tag-key} is a policy variable that is replaced with the value of the principal's tag when the policy is evaluated."
+      },
+      "environment": {
+        "users": [
+          {
+            "name": "alice",
+            "inline_policies": {
+              "inline": {
+                "Version": "2012-10-17",
+                "Statement": [
+                  {
+                    "Effect": "Allow",
+                    "Action": "s3:GetObject",
+                    "Resource": "arn:aws:s3:::teams/${aws:PrincipalTag/team}/*"
+                  }
+                ]
+              }
+            },
+            "tags": {
+              "team": "blue"
+            }
+          }
+        ]
+      },
+      "request": {
+        "principal": "arn:aws:iam::111111111111:user/alice",
+        "action": "s3:GetObject",
+        "resource": "arn:aws:s3:::teams/blue/plan.md"
+      },
+      "expected": "allowed",
+      "status": "confirmed",
+      "simulator": {
+        "supported": true,
+        "note": "aws:PrincipalTag/team is supplied as a ContextEntry from the principal's tags so the simulator can resolve the variable."
+      }
+    },
+    {
+      "id": "policy-variable-without-version-is-literal",
+      "title": "${aws:username} is a literal string in a policy that has no Version element",
+      "area": "policy-variables",
+      "source": {
+        "url": "https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_policies_variables.html",
+        "rule": "Policy variables are supported only with Version 2012-10-17; if the Version element is missing or earlier, variables like ${aws:username} are treated as literal strings."
+      },
+      "environment": {
+        "users": [
+          {
+            "name": "alice",
+            "inline_policies": {
+              "inline": {
+                "Statement": [
+                  {
+                    "Effect": "Allow",
+                    "Action": "s3:GetObject",
+                    "Resource": "arn:aws:s3:::home/${aws:username}/*"
+                  }
+                ]
+              }
+            }
+          }
+        ]
+      },
+      "request": {
+        "principal": "arn:aws:iam::111111111111:user/alice",
+        "action": "s3:GetObject",
+        "resource": "arn:aws:s3:::home/alice/notes.txt"
+      },
+      "expected": "implicit_deny",
+      "status": "confirmed",
+      "simulator": {
+        "supported": true,
+        "note": "The policy document is passed without a Version element; aws:username is still supplied as a ContextEntry so that any substitution would be observable."
+      }
+    },
+    {
+      "id": "principalarn-arnlike-matches-caller",
+      "title": "ArnLike aws:PrincipalArn arn:aws:iam::111111111111:user/al* matches the calling user",
+      "area": "principals",
+      "source": {
+        "url": "https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_policies_condition-keys.html#condition-keys-principalarn",
+        "rule": "aws:PrincipalArn is included in the request context for all signed requests and holds the caller's ARN; ArnLike compares it case-sensitively with * and ? wildcards."
+      },
+      "environment": {
+        "users": [
+          {
+            "name": "alice",
+            "inline_policies": {
+              "inline": {
+                "Version": "2012-10-17",
+                "Statement": [
+                  {
+                    "Effect": "Allow",
+                    "Action": "s3:GetObject",
+                    "Resource": "arn:aws:s3:::data/*",
+                    "Condition": {
+                      "ArnLike": {
+                        "aws:PrincipalArn": "arn:aws:iam::111111111111:user/al*"
+                      }
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        ]
+      },
+      "request": {
+        "principal": "arn:aws:iam::111111111111:user/alice",
+        "action": "s3:GetObject",
+        "resource": "arn:aws:s3:::data/report.csv"
+      },
+      "expected": "allowed",
+      "status": "confirmed",
+      "simulator": {
+        "supported": true,
+        "note": "aws:PrincipalArn is supplied as a ContextEntry from the principal ARN; SimulateCustomPolicy has no real caller identity."
+      }
+    },
+    {
+      "id": "principalaccount-condition-in-resource-policy",
+      "title": "A bucket policy with Principal * restricted to aws:PrincipalAccount 111111111111 grants a same-account user",
+      "area": "principals",
+      "source": {
+        "url": "https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_policies_condition-keys.html#condition-keys-principalaccount",
+        "rule": "aws:PrincipalAccount is included in the request context for all requests and holds the caller's account; a resource-based Allow with a wildcard Principal needs no other permissions for IAM users of the same account."
+      },
+      "environment": {
+        "users": [
+          {
+            "name": "alice"
+          }
+        ],
+        "s3_buckets": [
+          {
+            "name": "data",
+            "bucket_policy": {
+              "Version": "2012-10-17",
+              "Statement": [
+                {
+                  "Effect": "Allow",
+                  "Principal": "*",
+                  "Action": "s3:GetObject",
+                  "Resource": "arn:aws:s3:::data/*",
+                  "Condition": {
+                    "StringEquals": {
+                      "aws:PrincipalAccount": "111111111111"
+                    }
+                  }
+                }
+              ]
+            }
+          }
+        ]
+      },
+      "request": {
+        "principal": "arn:aws:iam::111111111111:user/alice",
+        "action": "s3:GetObject",
+        "resource": "arn:aws:s3:::data/report.csv"
+      },
+      "resource_policy_of": "data",
+      "expected": "allowed",
+      "status": "confirmed",
+      "simulator": {
+        "supported": true,
+        "note": "aws:PrincipalAccount is supplied as a ContextEntry from the principal's account in addition to CallerArn."
+      }
+    },
+    {
+      "id": "sourceaccount-absent-for-direct-request",
+      "title": "StringEquals aws:SourceAccount does not match a request made directly by a user",
+      "area": "principals",
+      "source": {
+        "url": "https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_policies_condition-keys.html#condition-keys-sourceaccount",
+        "rule": "aws:SourceAccount is included in the request context only when a service principal calls the resource on behalf of a resource; a key that is not present does not match and the condition is false."
+      },
+      "environment": {
+        "users": [
+          {
+            "name": "alice",
+            "inline_policies": {
+              "inline": {
+                "Version": "2012-10-17",
+                "Statement": [
+                  {
+                    "Effect": "Allow",
+                    "Action": "s3:GetObject",
+                    "Resource": "arn:aws:s3:::data/*",
+                    "Condition": {
+                      "StringEquals": {
+                        "aws:SourceAccount": "111111111111"
+                      }
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        ]
+      },
+      "request": {
+        "principal": "arn:aws:iam::111111111111:user/alice",
+        "action": "s3:GetObject",
+        "resource": "arn:aws:s3:::data/report.csv",
+        "context": {
+          "aws:SourceAccount": null
+        }
+      },
+      "expected": "implicit_deny",
+      "status": "confirmed",
+      "simulator": {
+        "supported": true,
+        "note": "A null context value in the corpus means the key is absent; the validator omits the ContextEntry for it."
+      }
+    },
+    {
+      "id": "same-account-root-principal-delegates-to-account",
+      "title": "A bucket policy whose Principal is the account root delegates to the account; the user still needs an identity-based allow",
+      "area": "resource-policy",
+      "source": {
+        "url": "https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_policies_elements_principal.html",
+        "rule": "Naming an AWS account (its root ARN) as the principal delegates authority to the account: the permission reaches the account's IAM identities only through their own identity-based policies, which must allow the action."
+      },
+      "environment": {
+        "users": [
+          {
+            "name": "alice"
+          }
+        ],
+        "s3_buckets": [
+          {
+            "name": "data",
+            "bucket_policy": {
+              "Version": "2012-10-17",
+              "Statement": [
+                {
+                  "Effect": "Allow",
+                  "Principal": {
+                    "AWS": "arn:aws:iam::111111111111:root"
+                  },
+                  "Action": "s3:GetObject",
+                  "Resource": "arn:aws:s3:::data/*"
+                }
+              ]
+            }
+          }
+        ]
+      },
+      "request": {
+        "principal": "arn:aws:iam::111111111111:user/alice",
+        "action": "s3:GetObject",
+        "resource": "arn:aws:s3:::data/report.csv"
+      },
+      "resource_policy_of": "data",
+      "expected": "implicit_deny",
+      "status": "confirmed",
+      "simulator": {
+        "supported": true,
+        "note": "CallerArn is the user and ResourceOwner is the same account; the simulator applies the same delegation rule to an account-root principal."
+      }
+    }
+  ]
+}

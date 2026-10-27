@@ -26,7 +26,11 @@ from dataclasses import dataclass, field
 from enum import Enum
 
 from attackpath.iam.conditions import RequestContext, evaluate_conditions
-from attackpath.iam.matching import statement_action_matches, statement_resource_matches
+from attackpath.iam.matching import (
+    POLICY_VARIABLE_VERSION,
+    statement_action_matches,
+    statement_resource_matches,
+)
 from attackpath.iam.principals import (
     IdentityKind,
     PrincipalIdentity,
@@ -144,6 +148,33 @@ class AssumeResult:
         if self.identity_permission is not None:
             items.extend(self.identity_permission.evidence())
         return items
+
+
+def _grants_identity_directly(raw: Mapping[str, object], identity: PrincipalIdentity) -> bool:
+    """True when a raw statement's ``Principal`` names everyone or the identity's own ARN.
+
+    Naming the account root (or a bare account id) instead delegates to the account, which
+    AWS treats differently: the identity then also needs an identity-based allow.
+    """
+    principal = raw.get("Principal")
+    if principal == "*":
+        return True
+    entries: list[str] = []
+    if isinstance(principal, Mapping):
+        aws = principal.get("AWS")
+        if aws == "*":
+            return True
+        if isinstance(aws, str):
+            entries = [aws]
+        elif isinstance(aws, list):
+            entries = [e for e in aws if isinstance(e, str)]
+    if "*" in entries:
+        return True
+    target = normalize_principal_arn(identity.arn)
+    return any(
+        not principal_entry_names_account(entry) and normalize_principal_arn(entry) == target
+        for entry in entries
+    )
 
 
 class LimitationLog:
@@ -298,10 +329,14 @@ class PolicyEvaluator:
         matches: list[StatementMatch] = []
         variables = {k: v if isinstance(v, str) else None for k, v in context.items()}
         for doc in docs:
+            # Only Version 2012-10-17 documents interpret ${...} policy variables.
+            literal = doc.version != POLICY_VARIABLE_VERSION
             for statement in doc.statements:
                 if not statement_action_matches(statement, action):
                     continue
-                resource_match = statement_resource_matches(statement, resource, variables)
+                resource_match = statement_resource_matches(
+                    statement, resource, variables, literal_variables=literal
+                )
                 if resource_match is Tri.FALSE:
                     continue
                 reasons: list[str] = []
@@ -323,7 +358,7 @@ class PolicyEvaluator:
                             "principal-match", f"{doc.source} {statement.label()}"
                         )
                 condition_result, condition_reasons = evaluate_conditions(
-                    statement.conditions, context
+                    statement.conditions, context, literal_variables=literal
                 )
                 if condition_result is Tri.FALSE:
                     continue
@@ -398,6 +433,7 @@ class PolicyEvaluator:
 
         resource_allow: Tri | None = None
         resource_deny: Tri | None = None
+        r_matches: list[StatementMatch] = []
         if resource_policy is not None:
             resource_allow, resource_deny, r_matches = self.evaluate_documents(
                 [resource_policy], action, resource, context, layer="resource", identity=identity
@@ -409,8 +445,16 @@ class PolicyEvaluator:
         if resource_allow is None:
             allow = identity_effective
         elif same_account:
-            # A resource policy naming the principal directly is not limited by a boundary.
-            allow = tri_or(identity_effective, resource_allow)
+            # A same-account resource policy that names the principal (or everyone) grants on
+            # its own and is not limited by a boundary. One that only names the account root
+            # delegates to the account: the identity policy must still allow the action.
+            direct = any(
+                m.effect is Effect.ALLOW
+                and m.result is not Tri.FALSE
+                and _grants_identity_directly(m.ref.statement, identity)
+                for m in r_matches
+            )
+            allow = tri_or(identity_effective, resource_allow if direct else Tri.FALSE)
         else:
             allow = tri_and(identity_effective, resource_allow)
 

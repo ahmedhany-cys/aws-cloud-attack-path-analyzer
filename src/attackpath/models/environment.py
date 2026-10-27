@@ -157,6 +157,139 @@ class LambdaFunction:
     tags: dict[str, str] = field(default_factory=dict)
 
 
+#: CIDR blocks that mean "every address on the internet".
+PUBLIC_IPV4_CIDR = "0.0.0.0/0"
+PUBLIC_IPV6_CIDR = "::/0"
+
+#: Ports whose exposure to the internet is a management or data-plane risk in itself.
+MANAGEMENT_PORTS: dict[int, str] = {
+    22: "SSH",
+    23: "Telnet",
+    135: "MS RPC",
+    139: "NetBIOS",
+    445: "SMB",
+    1433: "MSSQL",
+    1521: "Oracle",
+    2375: "Docker API",
+    2376: "Docker API (TLS)",
+    3306: "MySQL",
+    3389: "RDP",
+    5432: "PostgreSQL",
+    5900: "VNC",
+    5985: "WinRM",
+    5986: "WinRM (TLS)",
+    6379: "Redis",
+    8500: "Consul",
+    9200: "Elasticsearch",
+    11211: "Memcached",
+    27017: "MongoDB",
+}
+
+
+@dataclass(frozen=True)
+class IngressRule:
+    """One inbound rule of a security group."""
+
+    protocol: str  # tcp | udp | icmp | icmpv6 | all
+    from_port: int | None = None  # None: every port of the protocol
+    to_port: int | None = None
+    cidrs: tuple[str, ...] = ()
+    ipv6_cidrs: tuple[str, ...] = ()
+    source_groups: tuple[str, ...] = ()
+    description: str | None = None
+
+    @property
+    def is_public(self) -> bool:
+        return PUBLIC_IPV4_CIDR in self.cidrs or PUBLIC_IPV6_CIDR in self.ipv6_cidrs
+
+    @property
+    def portless(self) -> bool:
+        """ICMP rules carry type/code, not ports."""
+        return self.protocol in ("icmp", "icmpv6")
+
+    @property
+    def all_ports(self) -> bool:
+        """Every TCP/UDP port: protocol ``all``, or a TCP/UDP rule without a (full) range."""
+        if self.protocol == "all":
+            return True
+        if self.portless:
+            return False
+        if self.from_port is None or self.to_port is None:
+            return True
+        return self.from_port == 0 and self.to_port == 65535
+
+    def ports(self) -> list[int]:
+        """The individual ports of a bounded range (empty when every port is covered)."""
+        if self.all_ports or self.from_port is None or self.to_port is None:
+            return []
+        return list(range(self.from_port, min(self.to_port, self.from_port + 1023) + 1))
+
+    def management_ports(self) -> dict[int, str]:
+        """Management/database ports the rule exposes (they are TCP services)."""
+        if self.protocol not in ("tcp", "all"):
+            return {}
+        if self.all_ports:
+            return dict(MANAGEMENT_PORTS)
+        if self.from_port is None or self.to_port is None:
+            return {}
+        return {p: n for p, n in MANAGEMENT_PORTS.items() if self.from_port <= p <= self.to_port}
+
+    def describe(self) -> str:
+        if self.protocol == "all":
+            span = "all ports"
+        elif self.portless:
+            span = f"{self.protocol} (all types)"
+        elif self.all_ports:
+            span = f"{self.protocol} all ports"
+        elif self.from_port == self.to_port:
+            span = f"{self.protocol} {self.from_port}"
+        else:
+            span = f"{self.protocol} {self.from_port}-{self.to_port}"
+        sources = ", ".join([*self.cidrs, *self.ipv6_cidrs, *self.source_groups]) or "no source"
+        return f"{span} from {sources}"
+
+
+@dataclass
+class SecurityGroup:
+    group_id: str
+    name: str | None = None
+    vpc_id: str | None = None
+    description: str | None = None
+    ingress: list[IngressRule] = field(default_factory=list)
+    tags: dict[str, str] = field(default_factory=dict)
+
+    def public_ingress(self) -> list[IngressRule]:
+        return [rule for rule in self.ingress if rule.is_public]
+
+
+@dataclass
+class Ec2Instance:
+    instance_id: str
+    arn: str
+    account_id: str
+    region: str | None = None
+    name: str | None = None
+    state: str = "running"
+    public_ip: str | None = None
+    public_dns: str | None = None
+    subnet_id: str | None = None
+    vpc_id: str | None = None
+    internet_facing: bool | None = None  # does the subnet route to an internet gateway?
+    security_group_ids: list[str] = field(default_factory=list)
+    role_arn: str | None = None
+    instance_profile_arn: str | None = None
+    imdsv2_required: bool | None = None
+    tags: dict[str, str] = field(default_factory=dict)
+
+    @property
+    def label(self) -> str:
+        return self.name or self.instance_id
+
+    @property
+    def is_running(self) -> bool:
+        return self.state.lower() == "running"
+
+
 @dataclass
 class ExternalPrincipal:
     """A principal outside the analyzed account that appears in trust or resource policies."""
@@ -221,6 +354,8 @@ class Environment:
     managed_policies: list[ManagedPolicy] = field(default_factory=list)
     s3_buckets: list[S3Bucket] = field(default_factory=list)
     lambda_functions: list[LambdaFunction] = field(default_factory=list)
+    security_groups: list[SecurityGroup] = field(default_factory=list)
+    ec2_instances: list[Ec2Instance] = field(default_factory=list)
     external_principals: list[ExternalPrincipal] = field(default_factory=list)
 
     # ---- lookup helpers -------------------------------------------------
@@ -235,6 +370,8 @@ class Environment:
         self._policies_by_arn = {p.arn: p for p in self.managed_policies}
         self._buckets_by_arn = {b.arn: b for b in self.s3_buckets}
         self._lambdas_by_arn = {f.arn: f for f in self.lambda_functions}
+        self._groups_by_id = {g.group_id: g for g in self.security_groups}
+        self._instances_by_arn = {i.arn: i for i in self.ec2_instances}
 
     def user(self, arn: str) -> User | None:
         return self._users_by_arn.get(arn)
@@ -257,6 +394,12 @@ class Environment:
     def lambda_function(self, arn: str) -> LambdaFunction | None:
         return self._lambdas_by_arn.get(arn)
 
+    def security_group(self, group_id: str) -> SecurityGroup | None:
+        return self._groups_by_id.get(group_id)
+
+    def instance(self, arn: str) -> Ec2Instance | None:
+        return self._instances_by_arn.get(arn)
+
     def principal(self, arn: str) -> Principal | None:
         return self._users_by_arn.get(arn) or self._roles_by_arn.get(arn)
 
@@ -270,13 +413,20 @@ class Environment:
 
     @property
     def resource_count(self) -> int:
-        return len(self.s3_buckets) + len(self.lambda_functions)
+        return len(self.s3_buckets) + len(self.lambda_functions) + len(self.ec2_instances)
 
     def roles_used_by_lambdas(self) -> dict[str, list[LambdaFunction]]:
         result: dict[str, list[LambdaFunction]] = {}
         for fn in self.lambda_functions:
             if fn.role_arn:
                 result.setdefault(fn.role_arn, []).append(fn)
+        return result
+
+    def roles_used_by_instances(self) -> dict[str, list[Ec2Instance]]:
+        result: dict[str, list[Ec2Instance]] = {}
+        for instance in self.ec2_instances:
+            if instance.role_arn:
+                result.setdefault(instance.role_arn, []).append(instance)
         return result
 
     def summary(self) -> dict[str, int]:
@@ -287,5 +437,7 @@ class Environment:
             "managed_policies": len(self.managed_policies),
             "s3_buckets": len(self.s3_buckets),
             "lambda_functions": len(self.lambda_functions),
+            "ec2_instances": len(self.ec2_instances),
+            "security_groups": len(self.security_groups),
             "external_principals": len(self.external_principals),
         }

@@ -270,6 +270,40 @@ The same environment after scoping sts:AssumeRole and narrowing the trust policy
 
 **Limitations.** None.
 
+## 11-public-instance-path
+
+An internet-exposed jump host runs with a role that reads the PII bucket (a multi-service path), a web instance exposes SSH and allows IMDSv1, and a private worker produces no exposure finding.
+
+**Initial configuration.** 
+
+**Expected result.**
+
+- present: EC2-PUBLIC-EXPOSURE resource~i-0jump00000000000b >=high evidence=observed tag=management-port (every port open to the internet on a host whose role reads PII)
+- present: PATH-SENSITIVE resource~customer-pii-exports >=medium <=high evidence=hypothetical tag=multi-service (the internet -> jump host -> instance role -> PII bucket; capped at high because the first hop assumes a compromise)
+- present: EC2-PUBLIC-EXPOSURE resource~i-0web000000000000a tag=management-port (SSH is open to the internet next to the web ports)
+- present: EC2-IMDSV1 principal~role/ec2-web-instance resource~i-0web000000000000a
+- present: SENSITIVE-ACCESS principal~role/ec2-jump-host-legacy resource~customer-pii-exports tag=workload
+- absent: EC2-PUBLIC-EXPOSURE resource~i-0batch0000000000c (private subnet and no public address)
+- absent: EC2-IMDSV1 resource~i-0batch0000000000c (IMDSv2 is required on the worker)
+- absent: PATH-SENSITIVE principal~i-0jump00000000000b (instance -> own role -> bucket is the workload fact SENSITIVE-ACCESS reports)
+
+**Actual result.** 8 finding(s); all expectations met.
+
+| Severity | Check | Evidence | Title |
+|---|---|---|---|
+| critical | `EC2-PUBLIC-EXPOSURE` | observed | Instance legacy-jump is reachable from the internet on all ports |
+| high | `EC2-IMDSV1` | observed | Instance legacy-jump allows IMDSv1 while running as role ec2-jump-host-legacy |
+| high | `EC2-PUBLIC-EXPOSURE` | observed | Instance web-1 is reachable from the internet on tcp 22, tcp 80, tcp 443; management ports open: 22 (SSH) |
+| medium | `S3-PUBLIC-POLICY` | observed | Bucket public-marketing-assets is publicly accessible through its bucket policy |
+| medium | `SENSITIVE-ACCESS` | observed | Workload role ec2-jump-host-legacy can list/read sensitive bucket customer-pii-exports |
+| medium | `PATH-SENSITIVE` | hypothetical | The internet can reach bucket customer-pii-exports in 3 step(s) |
+| low | `EC2-IMDSV1` | observed | Instance web-1 allows IMDSv1 while running as role ec2-web-instance |
+| low | `COVERAGE-UNRESOLVED-POLICY` | observed | Policy document arn:aws:iam::111111111111:policy/pipeline-unresolved is referenced but not present in the snapshot |
+
+**Why the result is correct.** 
+
+**Limitations.** 
+
 ## Summary
 
-11 scenarios, 37 expectation(s) met, 0 failed at the time this page was generated.
+12 scenarios, 45 expectation(s) met, 0 failed at the time this page was generated.

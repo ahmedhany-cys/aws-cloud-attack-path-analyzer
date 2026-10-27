@@ -65,6 +65,7 @@ class Category(str, Enum):
     TRUST_RELATIONSHIP = "trust-relationship"
     PRIVILEGE_ESCALATION = "privilege-escalation"
     RESOURCE_EXPOSURE = "resource-exposure"
+    NETWORK_EXPOSURE = "network-exposure"
     SENSITIVE_ACCESS = "sensitive-data-access"
     ATTACK_PATH = "attack-path"
     EVALUATION_LIMITATION = "evaluation-limitation"

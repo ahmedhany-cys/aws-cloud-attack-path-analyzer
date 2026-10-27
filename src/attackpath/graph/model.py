@@ -28,9 +28,11 @@ class NodeType(str, Enum):
     MANAGED_POLICY = "managed-policy"
     S3_BUCKET = "s3-bucket"
     LAMBDA_FUNCTION = "lambda-function"
+    EC2_INSTANCE = "ec2-instance"
     EXTERNAL_ACCOUNT = "external-account"
     EXTERNAL_PRINCIPAL = "external-principal"
     ANONYMOUS = "anonymous"
+    INTERNET = "internet"
     SERVICE = "service"
 
 
@@ -39,12 +41,18 @@ class EdgeType(str, Enum):
     HAS_POLICY = "has-policy"
     TRUSTS = "trusts"
     EXECUTES_AS = "executes-as"
+    RUNS_AS = "runs-as"
+    NETWORK_EXPOSED = "network-exposed"
     CAN_ASSUME = "can-assume"
     CAN_ACCESS = "can-access"
 
 
-#: Edge types along which a path moves from one identity to another.
-TRANSITION_EDGE_TYPES: frozenset[EdgeType] = frozenset({EdgeType.CAN_ASSUME, EdgeType.EXECUTES_AS})
+#: Edge types along which a path moves from one identity (or foothold) to another:
+#: assuming a role, a function executing as its role, an instance running with its
+#: instance-profile role, and the internet reaching an instance's open ports.
+TRANSITION_EDGE_TYPES: frozenset[EdgeType] = frozenset(
+    {EdgeType.CAN_ASSUME, EdgeType.EXECUTES_AS, EdgeType.RUNS_AS, EdgeType.NETWORK_EXPOSED}
+)
 
 #: Node types that can start an attack path.
 SOURCE_NODE_TYPES: frozenset[NodeType] = frozenset(
@@ -52,9 +60,11 @@ SOURCE_NODE_TYPES: frozenset[NodeType] = frozenset(
         NodeType.USER,
         NodeType.ROLE,
         NodeType.LAMBDA_FUNCTION,
+        NodeType.EC2_INSTANCE,
         NodeType.EXTERNAL_ACCOUNT,
         NodeType.EXTERNAL_PRINCIPAL,
         NodeType.ANONYMOUS,
+        NodeType.INTERNET,
     }
 )
 
@@ -255,9 +265,11 @@ _NODE_COLORS: dict[NodeType, str] = {
     NodeType.MANAGED_POLICY: "#f8f9fa",
     NodeType.S3_BUCKET: "#fff3cd",
     NodeType.LAMBDA_FUNCTION: "#ffe5d0",
+    NodeType.EC2_INSTANCE: "#fde2c8",
     NodeType.EXTERNAL_ACCOUNT: "#f5c2c7",
     NodeType.EXTERNAL_PRINCIPAL: "#f5c2c7",
     NodeType.ANONYMOUS: "#f1aeb5",
+    NodeType.INTERNET: "#f1aeb5",
     NodeType.SERVICE: "#dee2e6",
 }
 

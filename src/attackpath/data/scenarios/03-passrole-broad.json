@@ -192,5 +192,7 @@
       "runtime": "python3.12",
       "role_arn": "arn:aws:iam::111111111111:role/lambda-image-resizer"
     }
-  ]
+  ],
+  "security_groups": [],
+  "ec2_instances": []
 }

@@ -124,8 +124,8 @@ def test_unknown_service_is_rejected_before_any_session(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     monkeypatch.setattr(scan_module, "_create_session", _fail_if_session_is_created)
-    assert run(services=("iam", "ec2")) == 1
-    assert "unsupported service(s): ec2" in capsys.readouterr().err
+    assert run(services=("iam", "rds")) == 1
+    assert "unsupported service(s): rds" in capsys.readouterr().err
     assert run(max_attempts=0) == 1
     assert "--max-attempts" in capsys.readouterr().err
 

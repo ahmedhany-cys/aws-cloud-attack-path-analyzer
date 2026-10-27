@@ -18,9 +18,10 @@ applies to the analyzer itself.
 | Starting point | Represented as | Why it matters |
 |---|---|---|
 | Compromised credentials of an IAM user | user node; exposure raised by long-lived access keys and console access without MFA | Phishing, leaked keys in repositories, credential stuffing |
-| Compromised workload | function node → execution role | Vulnerable application code, dependency compromise, SSRF to the credentials endpoint |
+| Compromised workload | function node → execution role; instance node → instance-profile role | Vulnerable application code, dependency compromise, SSRF to the credentials endpoint (IMDSv1) |
 | Another AWS account | external account / external principal nodes | Partner or vendor compromise, mistaken trust, typos in account ids |
-| Anyone on the internet | anonymous node | `Principal: "*"` in a trust, bucket or function policy |
+| Anyone on the internet, as an API caller | anonymous node | `Principal: "*"` in a trust, bucket or function policy |
+| Anyone on the internet, as a network attacker | internet node → `network-exposed` edge → instance | Security-group ingress from `0.0.0.0/0` on a host with a public address; brute force or exploitation of the listening service is a stated precondition, never assumed |
 
 ### Relationships examined
 

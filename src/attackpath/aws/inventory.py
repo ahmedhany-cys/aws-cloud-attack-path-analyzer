@@ -37,7 +37,7 @@ from attackpath.parser.environment_parser import parse_environment
 
 log = logging.getLogger(__name__)
 
-SUPPORTED_SERVICES: tuple[str, ...] = ("iam", "s3", "lambda")
+SUPPORTED_SERVICES: tuple[str, ...] = ("iam", "s3", "lambda", "ec2")
 SCHEMA_VERSION = "1.0"
 GENERATOR = "attackpath aws-scan"
 
@@ -78,6 +78,9 @@ class _Paging:
 _IAM_PAGING = _Paging("Marker", "Marker", "IsTruncated")
 _S3_PAGING = _Paging("ContinuationToken", "ContinuationToken")
 _LAMBDA_PAGING = _Paging("Marker", "NextMarker")
+_EC2_PAGING = _Paging("NextToken", "NextToken")
+_PUBLIC_IPV4 = "0.0.0.0/0"
+_PUBLIC_IPV6 = "::/0"
 
 
 @dataclass(frozen=True)
@@ -135,7 +138,7 @@ class _ServiceCoverage:
 
 
 class AwsInventoryCollector:
-    """Collect a read-only snapshot of IAM, S3 and Lambda from one AWS account.
+    """Collect a read-only snapshot of IAM, S3, Lambda and EC2 from one AWS account.
 
     ``session`` is a ``boto3.session.Session`` (or any object exposing the same
     ``client()`` and ``events`` members). ``sleeper`` and ``max_attempts`` control
@@ -161,6 +164,7 @@ class AwsInventoryCollector:
         self._max_attempts = max_attempts
         self._clients: dict[tuple[str, str], Any] = {}
         self._coverage: dict[str, _ServiceCoverage] = {}
+        self._instance_profile_roles: dict[str, str] = {}
         install_safeguards(session)
 
     @property
@@ -174,6 +178,7 @@ class AwsInventoryCollector:
     def collect(self) -> dict[str, Any]:
         """Inventory the account and return a validated snapshot document."""
         self._coverage = {}
+        self._instance_profile_roles = {}
         account_id, caller_arn = self._caller_identity()
         log.info("inventorying account %s as %s", account_id, caller_arn)
 
@@ -199,6 +204,8 @@ class AwsInventoryCollector:
             "managed_policies": [],
             "s3_buckets": [],
             "lambda_functions": [],
+            "security_groups": [],
+            "ec2_instances": [],
         }
         if "iam" in self._services:
             snapshot.update(self._collect_iam())
@@ -206,6 +213,10 @@ class AwsInventoryCollector:
             snapshot["s3_buckets"] = self._collect_s3(account_id)
         if "lambda" in self._services:
             snapshot["lambda_functions"] = self._collect_lambda(account_id)
+        if "ec2" in self._services:
+            groups, instances = self._collect_ec2(account_id)
+            snapshot["security_groups"] = groups
+            snapshot["ec2_instances"] = instances
         snapshot["coverage"] = self._coverage_document()
 
         try:
@@ -254,6 +265,12 @@ class AwsInventoryCollector:
         for page in pages:
             for key in _AUTHORIZATION_DETAIL_KEYS:
                 details[key].extend(page.get(key) or [])
+        # Instance profiles are listed with their role; EC2 instances only name the profile.
+        for item in details["RoleDetailList"]:
+            role_arn = item.get("Arn")
+            for profile in item.get("InstanceProfileList") or []:
+                if role_arn and profile.get("Arn"):
+                    self._instance_profile_roles[str(profile["Arn"])] = str(role_arn)
 
         managed = [
             policy
@@ -607,6 +624,149 @@ class AwsInventoryCollector:
         return function
 
     # ------------------------------------------------------------------
+    # EC2 (instances, security groups and the routing needed for exposure)
+    # ------------------------------------------------------------------
+
+    def _collect_ec2(self, account_id: str) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+        ec2 = self._client("ec2")
+        pages, failure = self._paginate(ec2, "describe_instances", _EC2_PAGING)
+        if failure is not None:
+            self._mark_missing("ec2", ec2, "describe_instances", failure)
+            return [], []
+        group_pages, failure = self._paginate(ec2, "describe_security_groups", _EC2_PAGING)
+        if failure is not None:
+            self._coverage_for("ec2").note(
+                f"{_label(ec2, 'describe_security_groups')} failed ({failure.error_code}): "
+                "the network exposure of instances cannot be determined"
+            )
+        groups = [
+            self._security_group(item)
+            for page in group_pages
+            for item in page.get("SecurityGroups") or []
+            if item.get("GroupId")
+        ]
+        route_tables = self._route_tables(ec2)
+        instances = [
+            self._instance(account_id, item, route_tables)
+            for page in pages
+            for reservation in page.get("Reservations") or []
+            for item in reservation.get("Instances") or []
+            if item.get("InstanceId")
+        ]
+        return groups, instances
+
+    def _route_tables(self, ec2: Any) -> list[dict[str, Any]] | None:
+        pages, failure = self._paginate(ec2, "describe_route_tables", _EC2_PAGING)
+        if failure is not None:
+            self._coverage_for("ec2").note(
+                f"{_label(ec2, 'describe_route_tables')} failed ({failure.error_code}): whether "
+                "instance subnets route to an internet gateway is unknown"
+            )
+            return None
+        return [table for page in pages for table in page.get("RouteTables") or []]
+
+    def _security_group(self, item: Mapping[str, Any]) -> dict[str, Any]:
+        rules: list[dict[str, Any]] = []
+        for permission in item.get("IpPermissions") or []:
+            protocol = str(permission.get("IpProtocol", "-1")).lower()
+            rule: dict[str, Any] = {
+                "protocol": "all" if protocol == "-1" else protocol,
+                "cidrs": [
+                    str(r["CidrIp"]) for r in permission.get("IpRanges") or [] if r.get("CidrIp")
+                ],
+                "ipv6_cidrs": [
+                    str(r["CidrIpv6"])
+                    for r in permission.get("Ipv6Ranges") or []
+                    if r.get("CidrIpv6")
+                ],
+                "source_groups": [
+                    str(g["GroupId"])
+                    for g in permission.get("UserIdGroupPairs") or []
+                    if g.get("GroupId")
+                ]
+                + [
+                    str(p["PrefixListId"])
+                    for p in permission.get("PrefixListIds") or []
+                    if p.get("PrefixListId")
+                ],
+            }
+            if not (rule["cidrs"] or rule["ipv6_cidrs"] or rule["source_groups"]):
+                continue
+            from_port, to_port = permission.get("FromPort"), permission.get("ToPort")
+            if (
+                rule["protocol"] in ("tcp", "udp")
+                and isinstance(from_port, int)
+                and isinstance(to_port, int)
+                and from_port >= 0
+                and to_port >= 0
+            ):
+                rule["from_port"], rule["to_port"] = from_port, to_port
+            descriptions = [
+                str(r["Description"])
+                for r in permission.get("IpRanges") or []
+                if r.get("Description")
+            ]
+            if descriptions:
+                rule["description"] = descriptions[0]
+            rules.append(rule)
+        return {
+            "group_id": str(item["GroupId"]),
+            "name": item.get("GroupName"),
+            "vpc_id": item.get("VpcId"),
+            "description": item.get("Description") or None,
+            "ingress": rules,
+            "tags": _tags_from_list(item.get("Tags")),
+        }
+
+    def _instance(
+        self, account_id: str, item: Mapping[str, Any], route_tables: list[dict[str, Any]] | None
+    ) -> dict[str, Any]:
+        instance_id = str(item["InstanceId"])
+        tags = _tags_from_list(item.get("Tags"))
+        profile = (item.get("IamInstanceProfile") or {}).get("Arn")
+        role_arn = self._instance_profile_roles.get(str(profile)) if profile else None
+        if profile and role_arn is None:
+            self._coverage_for("ec2").note(
+                f"instance {instance_id}: the role behind instance profile {profile} is not "
+                "known (IAM inventory missing or the profile is not listed with its role)"
+            )
+        metadata = item.get("MetadataOptions") or {}
+        tokens = metadata.get("HttpTokens")
+        imdsv2: bool | None
+        if metadata.get("HttpEndpoint") == "disabled":
+            imdsv2 = True  # no metadata service at all: nothing to steal through IMDSv1
+        elif tokens is None:
+            imdsv2 = None
+        else:
+            imdsv2 = str(tokens) == "required"
+        subnet_id = item.get("SubnetId")
+        vpc_id = item.get("VpcId")
+        internet_facing = (
+            _subnet_routes_to_internet_gateway(route_tables, subnet_id, vpc_id)
+            if route_tables is not None
+            else None
+        )
+        return {
+            "instance_id": instance_id,
+            "arn": f"arn:aws:ec2:{self._region}:{account_id}:instance/{instance_id}",
+            "region": self._region,
+            "name": tags.get("Name"),
+            "state": str((item.get("State") or {}).get("Name") or "unknown"),
+            "public_ip": item.get("PublicIpAddress"),
+            "public_dns": item.get("PublicDnsName") or None,
+            "subnet_id": subnet_id,
+            "vpc_id": vpc_id,
+            "internet_facing": internet_facing,
+            "security_groups": [
+                str(g["GroupId"]) for g in item.get("SecurityGroups") or [] if g.get("GroupId")
+            ],
+            "role_arn": role_arn,
+            "instance_profile_arn": str(profile) if profile else None,
+            "imdsv2_required": imdsv2,
+            "tags": tags,
+        }
+
+    # ------------------------------------------------------------------
     # call plumbing
     # ------------------------------------------------------------------
 
@@ -732,6 +892,10 @@ class AwsInventoryCollector:
         notes: list[str] = []
         if "lambda" in self._services:
             notes.append(f"Lambda functions were inventoried in region {self._region} only")
+        if "ec2" in self._services:
+            notes.append(
+                f"EC2 instances and security groups were inventoried in region {self._region} only"
+            )
         return {"services": services, "notes": notes}
 
 
@@ -839,6 +1003,32 @@ def _bucket_region(location: Mapping[str, Any]) -> str:
     if constraint == "EU":
         return "eu-west-1"
     return str(constraint)
+
+
+def _subnet_routes_to_internet_gateway(
+    tables: list[dict[str, Any]], subnet_id: Any, vpc_id: Any
+) -> bool | None:
+    """Whether the route table of ``subnet_id`` (or the VPC's main table) has an IGW default route."""
+    explicit: dict[str, Any] | None = None
+    main: dict[str, Any] | None = None
+    for candidate in tables:
+        for association in candidate.get("Associations") or []:
+            if subnet_id and association.get("SubnetId") == subnet_id:
+                explicit = candidate
+            if association.get("Main") and vpc_id and candidate.get("VpcId") == vpc_id:
+                main = candidate
+    table = explicit or main
+    if table is None:
+        return None
+    for route in table.get("Routes") or []:
+        gateway = str(route.get("GatewayId") or "")
+        if not gateway.startswith("igw-") or route.get("State", "active") != "active":
+            continue
+        if route.get("DestinationCidrBlock") == _PUBLIC_IPV4:
+            return True
+        if route.get("DestinationIpv6CidrBlock") == _PUBLIC_IPV6:
+            return True
+    return False
 
 
 def _has_public_grant(grants: Iterable[Mapping[str, Any]], permissions: frozenset[str]) -> bool:

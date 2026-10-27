@@ -1,0 +1,295 @@
+{
+  "schema_version": "1.0",
+  "metadata": {
+    "name": "scenario 11-public-instance-path",
+    "description": "An internet-exposed jump host runs with a role that reads the PII bucket (a multi-service path), a web instance exposes SSH and allows IMDSv1, and a private worker produces no exposure finding.",
+    "synthetic": true,
+    "source": "fixture",
+    "generator": "scripts/build_scenarios.py from fixtures/sample_environment.json"
+  },
+  "account_id": "111111111111",
+  "coverage": {
+    "services": {
+      "iam": "complete",
+      "s3": "complete",
+      "lambda": "complete",
+      "ec2": "complete"
+    }
+  },
+  "external_principals": [],
+  "managed_policies": [],
+  "groups": [],
+  "users": [],
+  "roles": [
+    {
+      "name": "ec2-jump-host-legacy",
+      "description": "Instance profile role of a legacy jump host; still allowed to read the PII export bucket",
+      "trust_policy": {
+        "Version": "2012-10-17",
+        "Statement": [
+          {
+            "Effect": "Allow",
+            "Principal": {
+              "Service": "ec2.amazonaws.com"
+            },
+            "Action": "sts:AssumeRole"
+          }
+        ]
+      },
+      "inline_policies": {
+        "legacy-exports": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Action": [
+                "s3:GetObject",
+                "s3:ListBucket"
+              ],
+              "Resource": [
+                "arn:aws:s3:::customer-pii-exports",
+                "arn:aws:s3:::customer-pii-exports/*"
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "ec2-web-instance",
+      "description": "Instance profile role for the marketing site",
+      "trust_policy": {
+        "Version": "2012-10-17",
+        "Statement": [
+          {
+            "Effect": "Allow",
+            "Principal": {
+              "Service": "ec2.amazonaws.com"
+            },
+            "Action": "sts:AssumeRole"
+          }
+        ]
+      },
+      "inline_policies": {
+        "assets": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Action": "s3:GetObject",
+              "Resource": "arn:aws:s3:::public-marketing-assets/*"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "data-pipeline-worker",
+      "description": "Pipeline role whose managed policy was not exported",
+      "trust_policy": {
+        "Version": "2012-10-17",
+        "Statement": [
+          {
+            "Effect": "Allow",
+            "Principal": {
+              "AWS": "arn:aws:iam::111111111111:root"
+            },
+            "Action": "sts:AssumeRole"
+          }
+        ]
+      },
+      "attached_policies": [
+        "arn:aws:iam::111111111111:policy/pipeline-unresolved"
+      ],
+      "inline_policies": {
+        "queue": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Action": [
+                "sqs:ReceiveMessage",
+                "sqs:DeleteMessage"
+              ],
+              "Resource": "arn:aws:sqs:us-east-1:111111111111:pipeline-queue"
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "s3_buckets": [
+    {
+      "name": "customer-pii-exports",
+      "sensitivity": "high",
+      "description": "Nightly exports containing customer personal data (fictional)",
+      "public_access_block": {
+        "block_public_acls": true,
+        "ignore_public_acls": true,
+        "block_public_policy": true,
+        "restrict_public_buckets": true
+      },
+      "encryption": "aws:kms",
+      "tags": {
+        "DataClassification": "pii"
+      }
+    },
+    {
+      "name": "public-marketing-assets",
+      "sensitivity": "low",
+      "description": "Intentionally public static assets",
+      "bucket_policy": {
+        "Version": "2012-10-17",
+        "Statement": [
+          {
+            "Sid": "PublicRead",
+            "Effect": "Allow",
+            "Principal": "*",
+            "Action": "s3:GetObject",
+            "Resource": "arn:aws:s3:::public-marketing-assets/*"
+          }
+        ]
+      }
+    }
+  ],
+  "lambda_functions": [],
+  "security_groups": [
+    {
+      "group_id": "sg-0jump000000000003",
+      "name": "legacy-jump-host",
+      "vpc_id": "vpc-0demo000000000001",
+      "description": "Jump host from a previous team: every port open to the world",
+      "ingress": [
+        {
+          "protocol": "-1",
+          "cidrs": [
+            "0.0.0.0/0"
+          ]
+        }
+      ]
+    },
+    {
+      "group_id": "sg-0web0000000000001",
+      "name": "web-public",
+      "vpc_id": "vpc-0demo000000000001",
+      "description": "Marketing site: web ports plus a forgotten SSH rule",
+      "ingress": [
+        {
+          "protocol": "tcp",
+          "from_port": 80,
+          "to_port": 80,
+          "cidrs": [
+            "0.0.0.0/0"
+          ],
+          "ipv6_cidrs": [
+            "::/0"
+          ]
+        },
+        {
+          "protocol": "tcp",
+          "from_port": 443,
+          "to_port": 443,
+          "cidrs": [
+            "0.0.0.0/0"
+          ],
+          "ipv6_cidrs": [
+            "::/0"
+          ]
+        },
+        {
+          "protocol": "tcp",
+          "from_port": 22,
+          "to_port": 22,
+          "cidrs": [
+            "0.0.0.0/0"
+          ],
+          "description": "temporary debugging access, never removed"
+        }
+      ]
+    },
+    {
+      "group_id": "sg-0int0000000000002",
+      "name": "internal-pipeline",
+      "vpc_id": "vpc-0demo000000000001",
+      "description": "Private workers: reachable only from the web tier and the corporate range",
+      "ingress": [
+        {
+          "protocol": "tcp",
+          "from_port": 5432,
+          "to_port": 5432,
+          "source_groups": [
+            "sg-0web0000000000001"
+          ]
+        },
+        {
+          "protocol": "tcp",
+          "from_port": 22,
+          "to_port": 22,
+          "cidrs": [
+            "10.0.0.0/8"
+          ]
+        }
+      ]
+    }
+  ],
+  "ec2_instances": [
+    {
+      "instance_id": "i-0jump00000000000b",
+      "name": "legacy-jump",
+      "region": "us-east-1",
+      "state": "running",
+      "public_ip": "203.0.113.25",
+      "subnet_id": "subnet-0pub0000000000001",
+      "vpc_id": "vpc-0demo000000000001",
+      "internet_facing": true,
+      "security_groups": [
+        "sg-0jump000000000003"
+      ],
+      "role_arn": "arn:aws:iam::111111111111:role/ec2-jump-host-legacy",
+      "instance_profile_arn": "arn:aws:iam::111111111111:instance-profile/ec2-jump-host-legacy",
+      "imdsv2_required": false,
+      "tags": {
+        "Name": "legacy-jump"
+      }
+    },
+    {
+      "instance_id": "i-0web000000000000a",
+      "name": "web-1",
+      "region": "us-east-1",
+      "state": "running",
+      "public_ip": "203.0.113.10",
+      "subnet_id": "subnet-0pub0000000000001",
+      "vpc_id": "vpc-0demo000000000001",
+      "internet_facing": true,
+      "security_groups": [
+        "sg-0web0000000000001"
+      ],
+      "role_arn": "arn:aws:iam::111111111111:role/ec2-web-instance",
+      "instance_profile_arn": "arn:aws:iam::111111111111:instance-profile/ec2-web-instance",
+      "imdsv2_required": false,
+      "tags": {
+        "Name": "web-1",
+        "team": "marketing"
+      }
+    },
+    {
+      "instance_id": "i-0batch0000000000c",
+      "name": "batch-worker",
+      "region": "us-east-1",
+      "state": "running",
+      "public_ip": null,
+      "subnet_id": "subnet-0priv000000000002",
+      "vpc_id": "vpc-0demo000000000001",
+      "internet_facing": false,
+      "security_groups": [
+        "sg-0int0000000000002"
+      ],
+      "role_arn": "arn:aws:iam::111111111111:role/data-pipeline-worker",
+      "instance_profile_arn": "arn:aws:iam::111111111111:instance-profile/data-pipeline-worker",
+      "imdsv2_required": true,
+      "tags": {
+        "Name": "batch-worker"
+      }
+    }
+  ]
+}

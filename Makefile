@@ -55,6 +55,10 @@ reports: ## Regenerate the committed sample reports from the synthetic fixture
 	$(BIN)/python -m attackpath analyze --input $(SAMPLE) --output reports/sample --quiet
 	$(BIN)/python scripts/generate_scenario_docs.py
 
+demo: ## Re-record the terminal demo (needs asciinema and agg on PATH; never run in CI)
+	PYTHON=$(BIN)/python asciinema rec --command "bash scripts/demo.sh" --overwrite docs/images/demo.cast
+	agg --cols 112 --rows 36 --font-size 15 --theme asciinema docs/images/demo.cast docs/images/demo.gif
+
 check: lint typecheck test security selfcheck ## Everything CI runs
 
 all: install check ## Install and run every check

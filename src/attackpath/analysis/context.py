@@ -122,6 +122,7 @@ class AnalysisContext:
             NodeType.ROLE: "role",
             NodeType.S3_BUCKET: "bucket",
             NodeType.LAMBDA_FUNCTION: "function",
+            NodeType.EC2_INSTANCE: "instance",
         }
         prefix = prefixes.get(node.type)
         return f"{prefix} {node.label}" if prefix else node.label
@@ -134,6 +135,14 @@ class AnalysisContext:
     def exposure_for_node(self, node: Node) -> FactorScore:
         if node.type is NodeType.ANONYMOUS:
             return FactorScore(1.0, 0, "reachable by any AWS principal or anonymously")
+        if node.type is NodeType.INTERNET:
+            return FactorScore(1.0, 0, "reachable from any internet address")
+        if node.type is NodeType.EC2_INSTANCE:
+            if node.attrs.get("public_ingress") and node.attrs.get("public_ip"):
+                return FactorScore(
+                    0.9, 0, "instance with a public address and ingress open to the internet"
+                )
+            return FactorScore(0.5, 0, "workload identity (instance can be compromised)")
         if node.type in (NodeType.EXTERNAL_ACCOUNT, NodeType.EXTERNAL_PRINCIPAL):
             if node.attrs.get("known"):
                 return FactorScore(
@@ -159,7 +168,11 @@ class AnalysisContext:
             if node.attrs.get("externally_trusted"):
                 value += 0.4
                 reasons.append("trusted by principals outside the account")
-            if node.attrs.get("workload_services") or node.attrs.get("used_by_lambdas"):
+            if (
+                node.attrs.get("workload_services")
+                or node.attrs.get("used_by_lambdas")
+                or node.attrs.get("used_by_instances")
+            ):
                 value += 0.2
                 reasons.append("workload execution role")
             return FactorScore(min(1.0, value), 0, "; ".join(reasons))
@@ -186,8 +199,12 @@ class AnalysisContext:
         return FactorScore(node.privilege, 0, f"estimated permission breadth {node.privilege:.2f}")
 
     def sensitive_buckets_reachable(self, node_id: str) -> list[str]:
+        """Sensitive buckets the identity itself can reach (access that exists only because a
+        bucket is public, or that Block Public Access neutralizes, is not the identity's privilege)."""
         names: list[str] = []
         for edge in self.graph.out_edges(node_id):
+            if not edge.traversable:
+                continue
             target = self.graph.node(edge.target)
             if target and target.type is NodeType.S3_BUCKET and target.attrs.get("sensitive"):
                 names.append(target.label)
@@ -210,8 +227,25 @@ class AnalysisContext:
     def is_workload(self, role: Role) -> bool:
         node = self.graph.node(role.arn)
         return bool(
-            node and (node.attrs.get("workload_services") or node.attrs.get("used_by_lambdas"))
+            node
+            and (
+                node.attrs.get("workload_services")
+                or node.attrs.get("used_by_lambdas")
+                or node.attrs.get("used_by_instances")
+            )
         )
+
+    def max_bucket_sensitivity(self, node_id: str) -> FactorScore:
+        """The most sensitive bucket reachable from ``node_id`` in one ``can-access`` hop."""
+        best: FactorScore | None = None
+        for edge in self.graph.out_edges(node_id):
+            bucket = self.env.bucket(edge.target) if edge.traversable else None
+            if bucket is None:
+                continue
+            candidate = self.sensitivity_factor(bucket)
+            if best is None or candidate.value > best.value:
+                best = candidate
+        return best or FactorScore(0.4, 0, "no bucket access known for the identity")
 
     def is_admin(self, principal: Principal) -> bool:
         node = self.graph.node(principal.arn)

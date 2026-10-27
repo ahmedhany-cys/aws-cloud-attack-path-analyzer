@@ -106,6 +106,43 @@ elements are rejected rather than ignored, so a typo cannot silently drop a poli
       "description": "free text",
       "tags": { ... }
     }
+  ],
+  "security_groups": [             // optional: inbound rules only (egress is not modelled)
+    {
+      "group_id": "sg-0web0000000000001",      // required
+      "name": "web-public",
+      "vpc_id": "vpc-0a1b2c3d",
+      "description": "free text",
+      "ingress": [
+        {
+          "protocol": "tcp",                   // tcp | udp | icmp | icmpv6 | all (or "-1")
+          "from_port": 443, "to_port": 443,    // omit for every port of the protocol
+          "cidrs": ["0.0.0.0/0"],              // IPv4 sources
+          "ipv6_cidrs": ["::/0"],              // IPv6 sources
+          "source_groups": ["sg-..."],         // security-group or prefix-list sources
+          "description": "free text"
+        }
+      ],
+      "tags": { ... }
+    }
+  ],
+  "ec2_instances": [                // optional
+    {
+      "instance_id": "i-0web000000000000a",    // required
+      "arn": "arn:aws:ec2:us-east-1:111111111111:instance/i-0web000000000000a",   // optional
+      "region": "us-east-1",
+      "name": "web-1",                         // usually the Name tag
+      "state": "running",                      // stopped/terminated instances get no exposure edge
+      "public_ip": "203.0.113.10" | null,
+      "public_dns": "...",
+      "subnet_id": "subnet-...", "vpc_id": "vpc-...",
+      "internet_facing": true,                 // subnet routes to an internet gateway; null = unknown
+      "security_groups": ["sg-0web0000000000001"],
+      "role_arn": "arn:aws:iam::111111111111:role/ec2-web-instance",   // from the instance profile
+      "instance_profile_arn": "arn:aws:iam::111111111111:instance-profile/ec2-web-instance",
+      "imdsv2_required": false,                // MetadataOptions.HttpTokens == "required"
+      "tags": { ... }
+    }
   ]
 }
 ```
@@ -119,9 +156,23 @@ elements are rejected rather than ignored, so a typo cannot silently drop a poli
   appear in the same statement; `Effect` must be exactly `Allow` or `Deny`.
 * Condition values may be strings, numbers or booleans (as AWS accepts); they are normalized to
   strings.
-* Counts above the safety limits (25 000 principals, 50 000 resources by default) are rejected.
+* Counts above the safety limits (25 000 principals, 50 000 resources by default) are rejected;
+  instances count as resources.
+* Ingress rules need a valid protocol, a port range within 0–65535 (`from_port` ≤ `to_port`, both
+  or neither given), syntactically valid CIDR blocks, and at least one source. `public_ip` must be
+  an IP address. An instance that references a security group absent from the snapshot produces
+  a warning, and its exposure through that group cannot be determined.
 * A missing `coverage` section produces an informational finding: the analyzer then cannot tell
   whether the snapshot is complete.
+
+### Network exposure fields
+
+An instance is treated as reachable from the internet only when it is `running`, has a
+`public_ip`, at least one of its security groups allows inbound traffic from `0.0.0.0/0` or
+`::/0`, and `internet_facing` is not `false`. When `internet_facing` is omitted the finding carries
+a precondition ("the subnet must route to an internet gateway") and a lower confidence. Network
+ACLs, load balancers, host firewalls and VPC peering are not part of the schema; see
+`docs/limitations.md`.
 
 ### Sensitivity
 

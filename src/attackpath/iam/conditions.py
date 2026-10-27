@@ -118,15 +118,21 @@ _OPERATORS: dict[str, tuple[Callable[[str, str], bool], bool]] = {
 SUPPORTED_OPERATORS = frozenset(_OPERATORS) | {"Null"}
 
 
-def evaluate_condition(condition: Condition, context: RequestContext) -> tuple[Tri, str | None]:
-    """Evaluate one condition entry. Returns ``(result, reason)``; reason set when UNKNOWN."""
+def evaluate_condition(
+    condition: Condition, context: RequestContext, *, literal_variables: bool = False
+) -> tuple[Tri, str | None]:
+    """Evaluate one condition entry. Returns ``(result, reason)``; reason set when UNKNOWN.
+
+    ``literal_variables`` is set for documents without ``Version: 2012-10-17``, in which
+    AWS treats ``${...}`` as ordinary text rather than as a policy variable.
+    """
     key = condition.key.lower()
     base = condition.base_operator
     variables = {k: v if isinstance(v, str) else None for k, v in context.items()}
 
     values: list[str] = []
     for raw in condition.values:
-        if "${" in raw:
+        if "${" in raw and not literal_variables:
             substituted, unresolved = substitute_policy_variables(raw, variables)
             if unresolved:
                 return (
@@ -159,12 +165,17 @@ def evaluate_condition(condition: Condition, context: RequestContext) -> tuple[T
         )
 
     ctx_raw = context[key]
+    matcher, negated = _OPERATORS[base]
     if ctx_raw is None:
-        # AWS: a missing key does not match unless the operator is ...IfExists.
-        return (Tri.TRUE, None) if condition.if_exists else (Tri.FALSE, None)
+        # The key is known to be absent from the request. AWS: ``...IfExists`` is then
+        # true; a negated operator (StringNotEquals, ArnNotLike, NotIpAddress, ...) is
+        # true because nothing can match; ``ForAllValues`` is true for an empty set of
+        # values; every other operator is false.
+        if condition.if_exists or negated or condition.set_operator == "ForAllValues":
+            return Tri.TRUE, None
+        return Tri.FALSE, None
 
     ctx_values = [ctx_raw] if isinstance(ctx_raw, str) else list(ctx_raw)
-    matcher, negated = _OPERATORS[base]
 
     try:
         if condition.set_operator == "ForAllValues":
@@ -185,13 +196,13 @@ def _matches_any(
 
 
 def evaluate_conditions(
-    conditions: Iterable[Condition], context: RequestContext
+    conditions: Iterable[Condition], context: RequestContext, *, literal_variables: bool = False
 ) -> tuple[Tri, list[str]]:
     """AND together all condition entries; collect reasons for UNKNOWN outcomes."""
     result = Tri.TRUE
     reasons: list[str] = []
     for condition in conditions:
-        value, reason = evaluate_condition(condition, context)
+        value, reason = evaluate_condition(condition, context, literal_variables=literal_variables)
         if value is Tri.FALSE:
             return Tri.FALSE, []
         if value is Tri.UNKNOWN:

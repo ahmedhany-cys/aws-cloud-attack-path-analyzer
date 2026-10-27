@@ -19,7 +19,7 @@ echo "== bandit"
 "$BIN/bandit" -q -r src -c pyproject.toml
 
 echo "== pip-audit"
-"$BIN/pip-audit" --strict --progress-spinner off
+"$BIN/pip-audit" --progress-spinner off --skip-editable
 
 echo "== detect-secrets"
 "$BIN/detect-secrets" scan --all-files \

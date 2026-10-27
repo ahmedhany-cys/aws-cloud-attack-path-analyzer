@@ -41,7 +41,7 @@ NARRATIVE: dict[str, dict[str, str]] = {
     },
     "02-risky-trust": {
         "configuration": (
-            "Three roles: `vendor-support-access` trusts `Principal: \"*\"` with no condition and holds "
+            'Three roles: `vendor-support-access` trusts `Principal: "*"` with no condition and holds '
             "`AmazonS3FullAccess`; `partner-integration` trusts account `222222222222` (declared as a known "
             "partner) without an `sts:ExternalId`; `third-party-monitoring` trusts account `333333333333` with "
             "an `sts:ExternalId` condition."

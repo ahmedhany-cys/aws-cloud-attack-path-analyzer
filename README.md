@@ -336,9 +336,13 @@ Results of the full local run that preceded publication (macOS, Apple M2, Python
 | `attackpath validate` | 11 scenarios, 37 expectations met, 0 failed |
 | wheel build + install in a clean virtualenv | `attackpath validate` passes with zero third-party packages installed |
 
-CI repeats the same gates on Python 3.11, 3.12, 3.13 and 3.14 (badge above). The AWS adapter is
-verified against stubbed botocore clients only; no live scan of a real account was performed for
-this release.
+CI repeats the same gates on Python 3.11, 3.12, 3.13 and 3.14 (badge above). The test suite
+verifies the AWS adapter against stubbed botocore clients. The adapter was also run once, read-only,
+against a real account on 2026-10-27 with an IAM user that did not hold the IAM and Lambda read
+permissions from [docs/aws-setup.md](docs/aws-setup.md): the `--confirm` gate, the STS identity
+check, the S3 inventory and the handling of access-denied responses as coverage gaps behaved as
+designed, and the run ended with two informational coverage findings. The IAM and Lambda inventories
+have therefore been exercised against stubbed responses only. No resources were created or modified.
 
 ## Performance
 

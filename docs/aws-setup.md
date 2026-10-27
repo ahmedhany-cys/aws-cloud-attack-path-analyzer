@@ -154,3 +154,14 @@ suite never needs credentials.
 Delete the snapshot files in `scans/` when you no longer need them (they describe your account's
 identity configuration in detail) and remove the scan identity or policy through your usual IAM
 process. The analyzer itself leaves nothing behind in the account.
+
+If the policy was attached inline to an existing user for a one-off scan, remove it afterwards and
+confirm that it is gone:
+
+```bash
+aws iam delete-user-policy --profile <profile> --user-name <user> --policy-name AttackPathReadOnlyInventory
+aws iam list-user-policies --profile <profile> --user-name <user>   # PolicyNames must no longer list it
+```
+
+For a role, use `delete-role-policy` / `list-role-policies`; for a customer-managed policy,
+`detach-user-policy` or `detach-role-policy` followed by `delete-policy`.

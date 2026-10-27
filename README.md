@@ -344,7 +344,8 @@ handling of access-denied responses as coverage gaps behaved as designed; then w
 [docs/aws-setup.md](docs/aws-setup.md) attached to that user, which gave complete IAM, S3 and
 Lambda coverage and an analysis run without errors. The second run exposed a cosmetic defect in
 the titles of `EVAL-INDETERMINATE` findings, fixed in the unreleased version (see the changelog).
-Results of real-account scans are not published. Apart from attaching that inline policy, no AWS
+Results of real-account scans are not published. The inline policy was attached to that user for
+the runs and removed afterwards, as described under *Teardown* in the setup guide; no other AWS
 resource was created or modified.
 
 ## Performance

@@ -5,7 +5,7 @@
   ],
   "tool_version": "0.1.0",
   "schema_version": "1.0",
-  "generated_at": "2026-10-27T10:15:20+00:00",
+  "generated_at": "2026-10-27T14:24:11+00:00",
   "input_description": "environment snapshot sample_environment.json",
   "account_id": "111111111111",
   "environment_name": "synthetic-demo-account",
@@ -5180,14 +5180,14 @@
       ]
     },
     {
-      "id": "APA-EVAL-INDETERMINATE-0020b3f4",
+      "id": "APA-EVAL-INDETERMINATE-32ea52cc",
       "check_id": "EVAL-INDETERMINATE",
       "category": "evaluation-limitation",
-      "title": "Statement could not be fully evaluated: inline:arn:aws:iam::111111111111:role/finance-reporting:vpce-only statement[0] (Sid",
+      "title": "Statement could not be fully evaluated: inline:arn:aws:iam::111111111111:role/finance-reporting:vpce-only statement[0] (Sid: ReadExportsViaEndpoint)",
       "severity": "informational",
       "confidence": "low",
       "evidence_kind": "indeterminate",
-      "description": "inline:arn:aws:iam::111111111111:role/finance-reporting:vpce-only statement[0] (Sid contains elements whose effect depends on request-time context or on constructs the analyzer does not implement: ReadExportsViaEndpoint): request context key aws:SourceVpce is not known from static configuration. Findings that depend on it are marked indeterminate rather than reported as allowed or denied.",
+      "description": "inline:arn:aws:iam::111111111111:role/finance-reporting:vpce-only statement[0] (Sid: ReadExportsViaEndpoint) contains elements whose effect depends on request-time context or on constructs the analyzer does not implement: request context key aws:SourceVpce is not known from static configuration. Findings that depend on it are marked indeterminate rather than reported as allowed or denied.",
       "impact": "The real permission may be broader or narrower than reported; a human review of the statement, or a policy-simulator run with the real context values, is required.",
       "remediation": {
         "summary": "Review the statement manually and prefer condition keys whose values are static (aws:PrincipalArn, aws:PrincipalOrgID, aws:SourceAccount) over request-time keys.",
@@ -5202,11 +5202,11 @@
         ]
       },
       "affected_principal": null,
-      "affected_resource": "inline:arn:aws:iam::111111111111:role/finance-reporting:vpce-only statement[0] (Sid",
+      "affected_resource": "inline:arn:aws:iam::111111111111:role/finance-reporting:vpce-only statement[0] (Sid: ReadExportsViaEndpoint)",
       "evidence": [
         {
-          "source": "inline:arn:aws:iam::111111111111:role/finance-reporting:vpce-only statement[0] (Sid",
-          "detail": "ReadExportsViaEndpoint): request context key aws:SourceVpce is not known from static configuration",
+          "source": "inline:arn:aws:iam::111111111111:role/finance-reporting:vpce-only statement[0] (Sid: ReadExportsViaEndpoint)",
+          "detail": "request context key aws:SourceVpce is not known from static configuration",
           "statement": null
         }
       ],
@@ -5505,7 +5505,7 @@
       }
     }
   },
-  "analysis_seconds": 0.0152,
+  "analysis_seconds": 0.0145,
   "summary": {
     "total_findings": 43,
     "by_severity": {

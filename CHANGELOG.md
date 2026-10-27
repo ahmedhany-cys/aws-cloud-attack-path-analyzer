@@ -4,6 +4,19 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Fixed
+
+* `EVAL-INDETERMINATE` findings no longer truncate the statement label at the first colon when
+  the statement has a `Sid`: the evaluator's limitation log now keeps the statement label and the
+  reason as separate fields instead of a single string that the check had to split.
+
+### Changed
+
+* README: records the read-only runs of the AWS adapter against a real account on 2026-10-27
+  (no results of real-account scans are published).
+
 ## [0.1.0] - 2026-10-27
 
 ### Added

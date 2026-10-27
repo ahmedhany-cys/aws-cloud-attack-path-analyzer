@@ -31,7 +31,7 @@ summary { cursor: pointer; font-weight: 600; }
 <tr><th>Input</th><td>environment snapshot sample_environment.json</td></tr>
 <tr><th>Environment</th><td>synthetic-demo-account (synthetic)</td></tr>
 <tr><th>Account</th><td>111111111111</td></tr>
-<tr><th>Generated</th><td>2026-10-27T10:15:20+00:00</td></tr>
+<tr><th>Generated</th><td>2026-10-27T14:24:11+00:00</td></tr>
 <tr><th>Findings</th><td>43</td></tr>
 <tr><th>Analysis time</th><td>0.015 s</td></tr>
 </table>
@@ -110,7 +110,7 @@ summary { cursor: pointer; font-weight: 600; }
 <tr><td><span class="badge low">LOW</span></td><td><code>APA-COVERAGE-UNRESOLVED-POLICY-724136a3</code></td><td>Policy document arn:aws:iam::111111111111:policy/pipeline-unresolved is referenced but not present in the snapshot</td><td>high</td><td>observed</td></tr>
 <tr><td><span class="badge low">LOW</span></td><td><code>APA-COVERAGE-UNRESOLVED-ROLE-03574b40</code></td><td>Execution role arn:aws:iam::111111111111:role/cleanup-role-missing is used by functions but not present in the snapshot</td><td>high</td><td>observed</td></tr>
 <tr><td><span class="badge informational">INFORMATIONAL</span></td><td><code>APA-SENSITIVE-ACCESS-d50401d5</code></td><td>Role finance-reporting can read sensitive bucket customer-pii-exports</td><td>low</td><td>indeterminate</td></tr>
-<tr><td><span class="badge informational">INFORMATIONAL</span></td><td><code>APA-EVAL-INDETERMINATE-0020b3f4</code></td><td>Statement could not be fully evaluated: inline:arn:aws:iam::111111111111:role/finance-reporting:vpce-only statement[0] (Sid</td><td>low</td><td>indeterminate</td></tr>
+<tr><td><span class="badge informational">INFORMATIONAL</span></td><td><code>APA-EVAL-INDETERMINATE-32ea52cc</code></td><td>Statement could not be fully evaluated: inline:arn:aws:iam::111111111111:role/finance-reporting:vpce-only statement[0] (Sid: ReadExportsViaEndpoint)</td><td>low</td><td>indeterminate</td></tr>
 <tr><td><span class="badge informational">INFORMATIONAL</span></td><td><code>APA-EVAL-INDETERMINATE-6f6938d6</code></td><td>Statement could not be fully evaluated: trust:arn:aws:iam::111111111111:role/third-party-monitoring statement[0]</td><td>low</td><td>indeterminate</td></tr>
 <tr><td><span class="badge informational">INFORMATIONAL</span></td><td><code>APA-COVERAGE-PARTIAL-923ec07b</code></td><td>Inventory coverage for lambda is partial</td><td>high</td><td>observed</td></tr>
 </table>
@@ -3079,20 +3079,20 @@ summary { cursor: pointer; font-weight: 600; }
 <li>https://docs.aws.amazon.com/AmazonS3/latest/userguide/bucket-policies.html</li>
 </ul>
 </details>
-<details><summary><span class="badge informational">INFORMATIONAL</span> Statement could not be fully evaluated: inline:arn:aws:iam::111111111111:role/finance-reporting:vpce-only statement[0] (Sid <code>APA-EVAL-INDETERMINATE-0020b3f4</code></summary>
+<details><summary><span class="badge informational">INFORMATIONAL</span> Statement could not be fully evaluated: inline:arn:aws:iam::111111111111:role/finance-reporting:vpce-only statement[0] (Sid: ReadExportsViaEndpoint) <code>APA-EVAL-INDETERMINATE-32ea52cc</code></summary>
 <table>
 <tr><th>Check</th><td>EVAL-INDETERMINATE</td></tr>
 <tr><th>Category</th><td>evaluation-limitation</td></tr>
 <tr><th>Score</th><td>9.6</td></tr>
 <tr><th>Confidence</th><td>low</td></tr>
 <tr><th>Evidence kind</th><td>indeterminate</td></tr>
-<tr><th>Resource</th><td>inline:arn:aws:iam::111111111111:role/finance-reporting:vpce-only statement[0] (Sid</td></tr>
+<tr><th>Resource</th><td>inline:arn:aws:iam::111111111111:role/finance-reporting:vpce-only statement[0] (Sid: ReadExportsViaEndpoint)</td></tr>
 <tr><th>Tags</th><td>indeterminate</td></tr>
 </table>
-<p><strong>Description.</strong> inline:arn:aws:iam::111111111111:role/finance-reporting:vpce-only statement[0] (Sid contains elements whose effect depends on request-time context or on constructs the analyzer does not implement: ReadExportsViaEndpoint): request context key aws:SourceVpce is not known from static configuration. Findings that depend on it are marked indeterminate rather than reported as allowed or denied.</p>
+<p><strong>Description.</strong> inline:arn:aws:iam::111111111111:role/finance-reporting:vpce-only statement[0] (Sid: ReadExportsViaEndpoint) contains elements whose effect depends on request-time context or on constructs the analyzer does not implement: request context key aws:SourceVpce is not known from static configuration. Findings that depend on it are marked indeterminate rather than reported as allowed or denied.</p>
 <p><strong>Impact.</strong> The real permission may be broader or narrower than reported; a human review of the statement, or a policy-simulator run with the real context values, is required.</p>
 <p><strong>Evidence</strong></p><ul>
-<li><code>inline:arn:aws:iam::111111111111:role/finance-reporting:vpce-only statement[0] (Sid</code>: ReadExportsViaEndpoint): request context key aws:SourceVpce is not known from static configuration
+<li><code>inline:arn:aws:iam::111111111111:role/finance-reporting:vpce-only statement[0] (Sid: ReadExportsViaEndpoint)</code>: request context key aws:SourceVpce is not known from static configuration
 </li>
 </ul>
 <details><summary>Score breakdown</summary><table><tr><th>Factor</th><th>Value</th><th>Weight</th><th>Rationale</th></tr>

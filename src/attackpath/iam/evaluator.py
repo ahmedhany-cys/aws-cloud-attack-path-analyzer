@@ -150,17 +150,29 @@ class LimitationLog:
     """Deduplicated record of everything the evaluator could not decide."""
 
     def __init__(self) -> None:
-        self._entries: dict[tuple[str, str], int] = {}
+        self._entries: dict[tuple[str, str, str], int] = {}
 
-    def record(self, kind: str, detail: str) -> None:
-        key = (kind, detail)
+    def record(self, kind: str, subject: str, reason: str = "") -> None:
+        """Count one occurrence of ``kind`` for ``subject`` (a policy ARN or a statement
+        label), with the optional ``reason`` kept separate so that labels containing
+        colons never have to be parsed apart again."""
+        key = (kind, subject, reason)
         self._entries[key] = self._entries.get(key, 0) + 1
 
     def entries(self) -> list[tuple[str, str, int]]:
-        return [(k[0], k[1], n) for k, n in sorted(self._entries.items())]
+        """``(kind, detail, count)`` triples, ``detail`` being ``subject: reason``."""
+        return [
+            (kind, f"{subject}: {reason}" if reason else subject, n)
+            for (kind, subject, reason), n in sorted(self._entries.items())
+        ]
 
-    def by_kind(self, kind: str) -> list[tuple[str, int]]:
-        return [(k[1], n) for k, n in sorted(self._entries.items()) if k[0] == kind]
+    def by_kind(self, kind: str) -> list[tuple[str, str, int]]:
+        """``(subject, reason, count)`` triples recorded under ``kind``."""
+        return [
+            (subject, reason, n)
+            for (k, subject, reason), n in sorted(self._entries.items())
+            if k == kind
+        ]
 
     def __len__(self) -> int:
         return len(self._entries)
@@ -317,7 +329,7 @@ class PolicyEvaluator:
                     continue
                 for reason in condition_reasons:
                     self.limitations.record(
-                        "condition", f"{doc.source} {statement.label()}: {reason}"
+                        "condition", f"{doc.source} {statement.label()}", reason
                     )
                 reasons.extend(condition_reasons)
                 applies = tri_and(resource_match, principal_match, condition_result)

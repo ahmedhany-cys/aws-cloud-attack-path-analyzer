@@ -171,7 +171,7 @@ An Allow guarded by aws:SourceVpce cannot be decided offline and is reported as 
 | Severity | Check | Evidence | Title |
 |---|---|---|---|
 | informational | `SENSITIVE-ACCESS` | indeterminate | Role finance-reporting can read sensitive bucket customer-pii-exports |
-| informational | `EVAL-INDETERMINATE` | indeterminate | Statement could not be fully evaluated: inline:arn:aws:iam::111111111111:role/finance-reporting:vpce-only statement[0] (Sid |
+| informational | `EVAL-INDETERMINATE` | indeterminate | Statement could not be fully evaluated: inline:arn:aws:iam::111111111111:role/finance-reporting:vpce-only statement[0] (Sid: ReadExportsViaEndpoint) |
 
 **Why the result is correct.** `aws:SourceVpce` is request-time context that a configuration snapshot does not contain. The condition evaluates to UNKNOWN, the access decision is `indeterminate`, and the finding says so with low confidence and a capped severity. A separate evaluation-limitation finding points at the statement. Treating the condition as satisfied would overstate the risk; treating it as unsatisfied would hide it.
 

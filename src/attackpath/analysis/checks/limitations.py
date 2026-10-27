@@ -24,8 +24,7 @@ def run(ctx: AnalysisContext) -> list[Finding]:
         return []
     grouped: dict[str, list[str]] = {}
     for kind in _KINDS:
-        for detail, _count in ctx.evaluator.limitations.by_kind(kind):
-            statement, _, reason = detail.partition(": ")
+        for statement, reason, _count in ctx.evaluator.limitations.by_kind(kind):
             if kind == "policy-variable":
                 reason = (
                     "resource pattern contains a policy variable that cannot be resolved offline"

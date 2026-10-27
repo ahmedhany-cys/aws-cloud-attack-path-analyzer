@@ -9,7 +9,7 @@ from attackpath.analysis.engine import analyze
 from attackpath.graph.builder import build_graph
 from attackpath.graph.model import AttackGraph, Edge, EdgeType, Node, NodeType
 from attackpath.graph.paths import find_attack_paths
-from attackpath.iam.evaluator import Decision, PolicyEvaluator
+from attackpath.iam.evaluator import Decision, LimitationLog, PolicyEvaluator
 from attackpath.models.finding import Confidence, EvidenceKind
 from attackpath.tri import Tri
 from tests.conftest import ACCOUNT, allow, env_from, policy, user_arn
@@ -122,3 +122,44 @@ def test_missing_policy_document_alone_is_not_a_privilege_finding() -> None:
     )
     assert "PATH-ADMIN" not in checks
     assert result.graph.out_edges(user_arn("u"), EdgeType.CAN_ASSUME) == []
+
+
+def test_indeterminate_statement_title_keeps_the_full_statement_label() -> None:
+    """Symptom: a statement with a ``Sid`` and a request-time condition was reported as
+    ``... statement[0] (Sid`` with the rest of the label leaking into the evidence detail,
+    because the limitation log stored the statement label and the reason in one string that
+    the check split at the first colon. Found on the first full-coverage run against a real
+    account, where every ``DenyInsecureTransport`` bucket statement was affected."""
+    log = LimitationLog()
+    log.record("condition", "doc statement[0] (Sid: X)", "request context key k is not known")
+    assert log.by_kind("condition") == [
+        ("doc statement[0] (Sid: X)", "request context key k is not known", 1)
+    ]
+    assert log.entries() == [
+        ("condition", "doc statement[0] (Sid: X): request context key k is not known", 1)
+    ]
+
+    env = env_from(
+        users=[
+            {
+                "name": "u",
+                "inline_policies": {
+                    "p": policy(
+                        allow(
+                            "s3:GetObject",
+                            "arn:aws:s3:::data/*",
+                            Sid="ReadViaEndpoint",
+                            Condition={"StringEquals": {"aws:SourceVpce": "vpce-0123"}},
+                        )
+                    )
+                },
+            }
+        ],
+        s3_buckets=[{"name": "data"}],
+    )
+    findings = [f for f in analyze(env).findings if f.check_id == "EVAL-INDETERMINATE"]
+    assert len(findings) == 1
+    finding = findings[0]
+    assert finding.title.endswith("statement[0] (Sid: ReadViaEndpoint)")
+    assert finding.evidence[0].source.endswith("statement[0] (Sid: ReadViaEndpoint)")
+    assert finding.evidence[0].detail.startswith("request context key aws:SourceVpce")

@@ -326,7 +326,7 @@ Results of the full local run that preceded publication (macOS, Apple M2, Python
 
 | Gate | Result |
 |---|---|
-| `pytest` | **247 passed, 0 failed, 0 skipped** (unit, integration, regression, property-based, stubbed AWS adapter, dashboard AppTest) |
+| `pytest` | **248 passed, 0 failed, 0 skipped** (unit, integration, regression, property-based, stubbed AWS adapter, dashboard AppTest) |
 | coverage | 94 % of 4 635 statements |
 | `ruff check` / `ruff format --check` | clean |
 | `mypy --strict` | clean, 52 source files |
@@ -337,12 +337,15 @@ Results of the full local run that preceded publication (macOS, Apple M2, Python
 | wheel build + install in a clean virtualenv | `attackpath validate` passes with zero third-party packages installed |
 
 CI repeats the same gates on Python 3.11, 3.12, 3.13 and 3.14 (badge above). The test suite
-verifies the AWS adapter against stubbed botocore clients. The adapter was also run once, read-only,
-against a real account on 2026-10-27 with an IAM user that did not hold the IAM and Lambda read
-permissions from [docs/aws-setup.md](docs/aws-setup.md): the `--confirm` gate, the STS identity
-check, the S3 inventory and the handling of access-denied responses as coverage gaps behaved as
-designed, and the run ended with two informational coverage findings. The IAM and Lambda inventories
-have therefore been exercised against stubbed responses only. No resources were created or modified.
+verifies the AWS adapter against stubbed botocore clients. The adapter was also run read-only
+against a real account on 2026-10-27: first with an IAM user that did not hold the IAM and Lambda
+read permissions, where the `--confirm` gate, the STS identity check, the S3 inventory and the
+handling of access-denied responses as coverage gaps behaved as designed; then with the policy from
+[docs/aws-setup.md](docs/aws-setup.md) attached to that user, which gave complete IAM, S3 and
+Lambda coverage and an analysis run without errors. The second run exposed a cosmetic defect in
+the titles of `EVAL-INDETERMINATE` findings, fixed in the unreleased version (see the changelog).
+Results of real-account scans are not published. Apart from attaching that inline policy, no AWS
+resource was created or modified.
 
 ## Performance
 

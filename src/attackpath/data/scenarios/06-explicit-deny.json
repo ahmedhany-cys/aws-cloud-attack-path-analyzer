@@ -1,0 +1,117 @@
+{
+  "schema_version": "1.0",
+  "metadata": {
+    "name": "scenario 06-explicit-deny",
+    "description": "A group grants s3:GetObject on * but an inline Deny blocks the PII bucket; the deny must win.",
+    "synthetic": true,
+    "source": "fixture",
+    "generator": "scripts/build_scenarios.py from fixtures/sample_environment.json"
+  },
+  "account_id": "111111111111",
+  "coverage": {
+    "services": {
+      "iam": "complete",
+      "s3": "complete",
+      "lambda": "complete"
+    }
+  },
+  "external_principals": [],
+  "managed_policies": [
+    {
+      "arn": "arn:aws:iam::111111111111:policy/analyst-read-only",
+      "name": "analyst-read-only",
+      "is_aws_managed": false,
+      "document": {
+        "Version": "2012-10-17",
+        "Statement": [
+          {
+            "Sid": "ReadAnyBucket",
+            "Effect": "Allow",
+            "Action": [
+              "s3:GetObject",
+              "s3:ListBucket",
+              "s3:GetBucketLocation"
+            ],
+            "Resource": "*"
+          }
+        ]
+      }
+    }
+  ],
+  "groups": [
+    {
+      "name": "data-analysts",
+      "attached_policies": [
+        "arn:aws:iam::111111111111:policy/analyst-read-only"
+      ]
+    }
+  ],
+  "users": [
+    {
+      "name": "analyst-readonly",
+      "groups": [
+        "data-analysts"
+      ],
+      "console_access": true,
+      "mfa_enabled": true,
+      "inline_policies": {
+        "deny-sensitive": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Sid": "DenyPiiBucket",
+              "Effect": "Deny",
+              "Action": [
+                "s3:GetObject",
+                "s3:ListBucket"
+              ],
+              "Resource": [
+                "arn:aws:s3:::customer-pii-exports",
+                "arn:aws:s3:::customer-pii-exports/*"
+              ]
+            },
+            {
+              "Sid": "DenyDestructive",
+              "Effect": "Deny",
+              "Action": [
+                "s3:DeleteObject",
+                "s3:PutBucketPolicy"
+              ],
+              "Resource": "*"
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "roles": [],
+  "s3_buckets": [
+    {
+      "name": "customer-pii-exports",
+      "sensitivity": "high",
+      "description": "Nightly exports containing customer personal data (fictional)",
+      "public_access_block": {
+        "block_public_acls": true,
+        "ignore_public_acls": true,
+        "block_public_policy": true,
+        "restrict_public_buckets": true
+      },
+      "encryption": "aws:kms",
+      "tags": {
+        "DataClassification": "pii"
+      }
+    },
+    {
+      "name": "finance-reports",
+      "sensitivity": "medium",
+      "description": "Monthly finance reports shared with the partner",
+      "public_access_block": {
+        "block_public_acls": true,
+        "ignore_public_acls": true,
+        "block_public_policy": true,
+        "restrict_public_buckets": true
+      }
+    }
+  ],
+  "lambda_functions": []
+}

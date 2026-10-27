@@ -1,0 +1,144 @@
+{
+  "schema_version": "1.0",
+  "metadata": {
+    "name": "scenario 10-remediation-after",
+    "description": "The same environment after scoping sts:AssumeRole and narrowing the trust policy: the path is gone.",
+    "synthetic": true,
+    "source": "fixture",
+    "generator": "scripts/build_scenarios.py from fixtures/sample_environment.json"
+  },
+  "account_id": "111111111111",
+  "coverage": {
+    "services": {
+      "iam": "complete",
+      "s3": "complete",
+      "lambda": "complete"
+    }
+  },
+  "external_principals": [],
+  "managed_policies": [
+    {
+      "arn": "arn:aws:iam::aws:policy/AdministratorAccess",
+      "name": "AdministratorAccess",
+      "is_aws_managed": true,
+      "document": {
+        "Version": "2012-10-17",
+        "Statement": [
+          {
+            "Effect": "Allow",
+            "Action": "*",
+            "Resource": "*"
+          }
+        ]
+      }
+    }
+  ],
+  "groups": [],
+  "users": [
+    {
+      "name": "legacy-automation",
+      "console_access": false,
+      "mfa_enabled": false,
+      "access_keys": [
+        {
+          "key_id": "SYNTHETIC-KEY-ID-0002",
+          "status": "Active",
+          "created": "2022-06-01T00:00:00Z"
+        }
+      ],
+      "inline_policies": {
+        "legacy": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Sid": "AssumePipelineRoleOnly",
+              "Effect": "Allow",
+              "Action": "sts:AssumeRole",
+              "Resource": "arn:aws:iam::111111111111:role/data-pipeline-worker"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "break-glass-admin",
+      "attached_policies": [
+        "arn:aws:iam::aws:policy/AdministratorAccess"
+      ],
+      "mfa_enabled": true,
+      "console_access": true,
+      "tags": {
+        "purpose": "break-glass"
+      }
+    }
+  ],
+  "roles": [
+    {
+      "name": "ops-admin-legacy",
+      "description": "Legacy operations role with unrestricted permissions",
+      "trust_policy": {
+        "Version": "2012-10-17",
+        "Statement": [
+          {
+            "Effect": "Allow",
+            "Principal": {
+              "AWS": "arn:aws:iam::111111111111:user/break-glass-admin"
+            },
+            "Action": "sts:AssumeRole",
+            "Condition": {
+              "Bool": {
+                "aws:MultiFactorAuthPresent": "true"
+              }
+            }
+          }
+        ]
+      },
+      "inline_policies": {
+        "all": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Action": "*",
+              "Resource": "*"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "data-pipeline-worker",
+      "description": "Pipeline role (managed policy replaced by the inline queue policy)",
+      "trust_policy": {
+        "Version": "2012-10-17",
+        "Statement": [
+          {
+            "Effect": "Allow",
+            "Principal": {
+              "AWS": "arn:aws:iam::111111111111:root"
+            },
+            "Action": "sts:AssumeRole"
+          }
+        ]
+      },
+      "attached_policies": [],
+      "inline_policies": {
+        "queue": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Action": [
+                "sqs:ReceiveMessage",
+                "sqs:DeleteMessage"
+              ],
+              "Resource": "arn:aws:sqs:us-east-1:111111111111:pipeline-queue"
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "s3_buckets": [],
+  "lambda_functions": []
+}

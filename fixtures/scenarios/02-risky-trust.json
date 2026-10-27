@@ -1,0 +1,167 @@
+{
+  "schema_version": "1.0",
+  "metadata": {
+    "name": "scenario 02-risky-trust",
+    "description": "Anonymous trust, cross-account trust without ExternalId, and cross-account trust with ExternalId.",
+    "synthetic": true,
+    "source": "fixture",
+    "generator": "scripts/build_scenarios.py from fixtures/sample_environment.json"
+  },
+  "account_id": "111111111111",
+  "coverage": {
+    "services": {
+      "iam": "complete",
+      "s3": "complete",
+      "lambda": "complete"
+    }
+  },
+  "external_principals": [
+    {
+      "arn": "arn:aws:iam::222222222222:root",
+      "description": "Partner analytics provider (fictional)",
+      "known": true
+    }
+  ],
+  "managed_policies": [
+    {
+      "arn": "arn:aws:iam::aws:policy/AmazonS3FullAccess",
+      "name": "AmazonS3FullAccess",
+      "is_aws_managed": true,
+      "document": {
+        "Version": "2012-10-17",
+        "Statement": [
+          {
+            "Effect": "Allow",
+            "Action": [
+              "s3:*",
+              "s3-object-lambda:*"
+            ],
+            "Resource": "*"
+          }
+        ]
+      }
+    }
+  ],
+  "groups": [],
+  "users": [],
+  "roles": [
+    {
+      "name": "vendor-support-access",
+      "description": "Support role whose trust policy was never scoped",
+      "trust_policy": {
+        "Version": "2012-10-17",
+        "Statement": [
+          {
+            "Effect": "Allow",
+            "Principal": {
+              "AWS": "*"
+            },
+            "Action": "sts:AssumeRole"
+          }
+        ]
+      },
+      "attached_policies": [
+        "arn:aws:iam::aws:policy/AmazonS3FullAccess"
+      ]
+    },
+    {
+      "name": "partner-integration",
+      "description": "Lets the partner account pull finance reports",
+      "trust_policy": {
+        "Version": "2012-10-17",
+        "Statement": [
+          {
+            "Effect": "Allow",
+            "Principal": {
+              "AWS": "arn:aws:iam::222222222222:root"
+            },
+            "Action": "sts:AssumeRole"
+          }
+        ]
+      },
+      "inline_policies": {
+        "read-reports": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Action": [
+                "s3:GetObject",
+                "s3:ListBucket"
+              ],
+              "Resource": [
+                "arn:aws:s3:::finance-reports",
+                "arn:aws:s3:::finance-reports/*"
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "third-party-monitoring",
+      "description": "Vendor monitoring integration with an external id",
+      "trust_policy": {
+        "Version": "2012-10-17",
+        "Statement": [
+          {
+            "Effect": "Allow",
+            "Principal": {
+              "AWS": "arn:aws:iam::333333333333:root"
+            },
+            "Action": "sts:AssumeRole",
+            "Condition": {
+              "StringEquals": {
+                "sts:ExternalId": "synthetic-external-id-0000"
+              }
+            }
+          }
+        ]
+      },
+      "inline_policies": {
+        "read-metrics": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Action": [
+                "cloudwatch:GetMetricData",
+                "cloudwatch:ListMetrics"
+              ],
+              "Resource": "*"
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "s3_buckets": [
+    {
+      "name": "finance-reports",
+      "sensitivity": "medium",
+      "description": "Monthly finance reports shared with the partner",
+      "public_access_block": {
+        "block_public_acls": true,
+        "ignore_public_acls": true,
+        "block_public_policy": true,
+        "restrict_public_buckets": true
+      }
+    },
+    {
+      "name": "customer-pii-exports",
+      "sensitivity": "high",
+      "description": "Nightly exports containing customer personal data (fictional)",
+      "public_access_block": {
+        "block_public_acls": true,
+        "ignore_public_acls": true,
+        "block_public_policy": true,
+        "restrict_public_buckets": true
+      },
+      "encryption": "aws:kms",
+      "tags": {
+        "DataClassification": "pii"
+      }
+    }
+  ],
+  "lambda_functions": []
+}

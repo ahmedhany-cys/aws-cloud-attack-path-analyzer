@@ -1,0 +1,60 @@
+# Default risk-scoring model for the AWS Cloud Attack Path Analyzer.
+#
+# Scores are prioritization heuristics, not proof of exploitability.
+# Every finding records the factor values, weights and multipliers that produced
+# its score, so the arithmetic below can be audited from the report itself.
+#
+#   base  = 100 * sum(weight_f * value_f) / sum(weight_f)          (value_f in 0..1)
+#   raw   = base * evidence_multiplier * confidence_multiplier * precondition_multiplier
+#   precondition_multiplier = max(floor, 1 - penalty_per_item * count)
+#   severity = highest threshold that raw reaches, then capped by evidence kind
+#              and by per-check overrides.
+#
+# Override with:  python -m attackpath analyze --scoring-config my-scoring.toml
+
+[weights]
+permission_breadth   = 20   # how many actions/resources the grant covers
+escalation_potential = 25   # can it lead to more privilege (up to full admin)?
+resource_sensitivity = 20   # sensitivity of what becomes reachable
+trust_boundary       = 15   # does the path cross an account or anonymous boundary?
+exposure             = 10   # how exposed is the starting identity (keys, no MFA, external)?
+reachability         = 10   # how direct is the path (1 hop vs several)?
+
+[evidence_multipliers]
+observed      = 1.00   # a direct configuration fact
+inferred      = 0.90   # combination of configuration facts
+hypothetical  = 0.70   # needs assumptions beyond the snapshot
+indeterminate = 0.50   # the evaluator could not decide
+
+[confidence_multipliers]
+high   = 1.00
+medium = 0.90
+low    = 0.75
+
+[preconditions]
+penalty_per_item = 0.08
+floor            = 0.50
+
+[thresholds]
+critical = 80
+high     = 60
+medium   = 40
+low      = 20
+
+# The maximum severity a finding may receive for each evidence kind.
+[severity_caps]
+hypothetical  = "high"
+indeterminate = "medium"
+
+# Per-check overrides. `fixed_severity` pins the level; `max_severity` caps it.
+[check_overrides.COVERAGE-PARTIAL]
+fixed_severity = "informational"
+
+[check_overrides.COVERAGE-UNRESOLVED-POLICY]
+fixed_severity = "low"
+
+[check_overrides.COVERAGE-UNRESOLVED-ROLE]
+fixed_severity = "low"
+
+[check_overrides.EVAL-INDETERMINATE]
+max_severity = "low"

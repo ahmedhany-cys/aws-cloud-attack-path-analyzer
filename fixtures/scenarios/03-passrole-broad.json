@@ -1,0 +1,196 @@
+{
+  "schema_version": "1.0",
+  "metadata": {
+    "name": "scenario 03-passrole-broad",
+    "description": "A deployment user holds iam:PassRole on * together with Lambda write permissions.",
+    "synthetic": true,
+    "source": "fixture",
+    "generator": "scripts/build_scenarios.py from fixtures/sample_environment.json"
+  },
+  "account_id": "111111111111",
+  "coverage": {
+    "services": {
+      "iam": "complete",
+      "s3": "complete",
+      "lambda": "complete"
+    }
+  },
+  "external_principals": [],
+  "managed_policies": [
+    {
+      "arn": "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole",
+      "name": "AWSLambdaBasicExecutionRole",
+      "is_aws_managed": true,
+      "document": {
+        "Version": "2012-10-17",
+        "Statement": [
+          {
+            "Effect": "Allow",
+            "Action": [
+              "logs:CreateLogGroup",
+              "logs:CreateLogStream",
+              "logs:PutLogEvents"
+            ],
+            "Resource": "*"
+          }
+        ]
+      }
+    },
+    {
+      "arn": "arn:aws:iam::aws:policy/AmazonS3FullAccess",
+      "name": "AmazonS3FullAccess",
+      "is_aws_managed": true,
+      "document": {
+        "Version": "2012-10-17",
+        "Statement": [
+          {
+            "Effect": "Allow",
+            "Action": [
+              "s3:*",
+              "s3-object-lambda:*"
+            ],
+            "Resource": "*"
+          }
+        ]
+      }
+    }
+  ],
+  "groups": [],
+  "users": [
+    {
+      "name": "ci-deployer",
+      "console_access": false,
+      "mfa_enabled": false,
+      "access_keys": [
+        {
+          "key_id": "SYNTHETIC-KEY-ID-0001",
+          "status": "Active",
+          "created": "2025-01-10T09:00:00Z"
+        }
+      ],
+      "inline_policies": {
+        "deploy": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Sid": "PassAnyRole",
+              "Effect": "Allow",
+              "Action": "iam:PassRole",
+              "Resource": "*"
+            },
+            {
+              "Sid": "ManageFunctions",
+              "Effect": "Allow",
+              "Action": [
+                "lambda:CreateFunction",
+                "lambda:UpdateFunctionCode",
+                "lambda:UpdateFunctionConfiguration",
+                "lambda:InvokeFunction",
+                "lambda:GetFunction"
+              ],
+              "Resource": "*"
+            },
+            {
+              "Sid": "UploadArtifacts",
+              "Effect": "Allow",
+              "Action": "s3:PutObject",
+              "Resource": "arn:aws:s3:::build-artifacts/*"
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "roles": [
+    {
+      "name": "ops-admin-legacy",
+      "description": "Legacy operations role with unrestricted permissions",
+      "trust_policy": {
+        "Version": "2012-10-17",
+        "Statement": [
+          {
+            "Effect": "Allow",
+            "Principal": {
+              "AWS": "arn:aws:iam::111111111111:root"
+            },
+            "Action": "sts:AssumeRole"
+          },
+          {
+            "Effect": "Allow",
+            "Principal": {
+              "Service": "ec2.amazonaws.com"
+            },
+            "Action": "sts:AssumeRole"
+          }
+        ]
+      },
+      "inline_policies": {
+        "all": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Action": "*",
+              "Resource": "*"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "lambda-image-resizer",
+      "description": "Execution role for the image resizer function",
+      "trust_policy": {
+        "Version": "2012-10-17",
+        "Statement": [
+          {
+            "Effect": "Allow",
+            "Principal": {
+              "Service": "lambda.amazonaws.com"
+            },
+            "Action": "sts:AssumeRole"
+          }
+        ]
+      },
+      "attached_policies": [
+        "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole",
+        "arn:aws:iam::aws:policy/AmazonS3FullAccess"
+      ]
+    }
+  ],
+  "s3_buckets": [
+    {
+      "name": "build-artifacts",
+      "sensitivity": "low",
+      "public_access_block": {
+        "block_public_acls": true,
+        "ignore_public_acls": true,
+        "block_public_policy": true,
+        "restrict_public_buckets": true
+      }
+    },
+    {
+      "name": "customer-pii-exports",
+      "sensitivity": "high",
+      "description": "Nightly exports containing customer personal data (fictional)",
+      "public_access_block": {
+        "block_public_acls": true,
+        "ignore_public_acls": true,
+        "block_public_policy": true,
+        "restrict_public_buckets": true
+      },
+      "encryption": "aws:kms",
+      "tags": {
+        "DataClassification": "pii"
+      }
+    }
+  ],
+  "lambda_functions": [
+    {
+      "name": "image-resizer",
+      "region": "us-east-1",
+      "runtime": "python3.12",
+      "role_arn": "arn:aws:iam::111111111111:role/lambda-image-resizer"
+    }
+  ]
+}

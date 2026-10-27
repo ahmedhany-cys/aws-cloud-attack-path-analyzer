@@ -1,0 +1,112 @@
+{
+  "schema_version": "1.0",
+  "metadata": {
+    "name": "scenario 08-safe-configuration",
+    "description": "A least-privilege execution role scoped to its two buckets produces no high-severity finding.",
+    "synthetic": true,
+    "source": "fixture",
+    "generator": "scripts/build_scenarios.py from fixtures/sample_environment.json"
+  },
+  "account_id": "111111111111",
+  "coverage": {
+    "services": {
+      "iam": "complete",
+      "s3": "complete",
+      "lambda": "complete"
+    }
+  },
+  "external_principals": [],
+  "managed_policies": [
+    {
+      "arn": "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole",
+      "name": "AWSLambdaBasicExecutionRole",
+      "is_aws_managed": true,
+      "document": {
+        "Version": "2012-10-17",
+        "Statement": [
+          {
+            "Effect": "Allow",
+            "Action": [
+              "logs:CreateLogGroup",
+              "logs:CreateLogStream",
+              "logs:PutLogEvents"
+            ],
+            "Resource": "*"
+          }
+        ]
+      }
+    }
+  ],
+  "groups": [],
+  "users": [],
+  "roles": [
+    {
+      "name": "lambda-thumbnailer-least-priv",
+      "description": "Execution role scoped to the thumbnail buckets",
+      "trust_policy": {
+        "Version": "2012-10-17",
+        "Statement": [
+          {
+            "Effect": "Allow",
+            "Principal": {
+              "Service": "lambda.amazonaws.com"
+            },
+            "Action": "sts:AssumeRole"
+          }
+        ]
+      },
+      "attached_policies": [
+        "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
+      ],
+      "inline_policies": {
+        "thumbnails": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Sid": "ReadInput",
+              "Effect": "Allow",
+              "Action": "s3:GetObject",
+              "Resource": "arn:aws:s3:::thumbnail-input/*"
+            },
+            {
+              "Sid": "WriteOutput",
+              "Effect": "Allow",
+              "Action": "s3:PutObject",
+              "Resource": "arn:aws:s3:::thumbnail-output/*"
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "s3_buckets": [
+    {
+      "name": "thumbnail-input",
+      "sensitivity": "low",
+      "public_access_block": {
+        "block_public_acls": true,
+        "ignore_public_acls": true,
+        "block_public_policy": true,
+        "restrict_public_buckets": true
+      }
+    },
+    {
+      "name": "thumbnail-output",
+      "sensitivity": "low",
+      "public_access_block": {
+        "block_public_acls": true,
+        "ignore_public_acls": true,
+        "block_public_policy": true,
+        "restrict_public_buckets": true
+      }
+    }
+  ],
+  "lambda_functions": [
+    {
+      "name": "thumbnailer",
+      "region": "us-east-1",
+      "runtime": "python3.12",
+      "role_arn": "arn:aws:iam::111111111111:role/lambda-thumbnailer-least-priv"
+    }
+  ]
+}

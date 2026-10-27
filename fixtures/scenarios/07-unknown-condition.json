@@ -1,0 +1,76 @@
+{
+  "schema_version": "1.0",
+  "metadata": {
+    "name": "scenario 07-unknown-condition",
+    "description": "An Allow guarded by aws:SourceVpce cannot be decided offline and is reported as indeterminate.",
+    "synthetic": true,
+    "source": "fixture",
+    "generator": "scripts/build_scenarios.py from fixtures/sample_environment.json"
+  },
+  "account_id": "111111111111",
+  "coverage": {
+    "services": {
+      "iam": "complete",
+      "s3": "complete",
+      "lambda": "complete"
+    }
+  },
+  "external_principals": [],
+  "managed_policies": [],
+  "groups": [],
+  "users": [],
+  "roles": [
+    {
+      "name": "finance-reporting",
+      "description": "Reads exports only through the finance VPC endpoint",
+      "trust_policy": {
+        "Version": "2012-10-17",
+        "Statement": [
+          {
+            "Effect": "Allow",
+            "Principal": {
+              "AWS": "arn:aws:iam::111111111111:root"
+            },
+            "Action": "sts:AssumeRole"
+          }
+        ]
+      },
+      "inline_policies": {
+        "vpce-only": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Sid": "ReadExportsViaEndpoint",
+              "Effect": "Allow",
+              "Action": "s3:GetObject",
+              "Resource": "arn:aws:s3:::customer-pii-exports/*",
+              "Condition": {
+                "StringEquals": {
+                  "aws:SourceVpce": "vpce-0f1e2d3c4b5a69788"
+                }
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "s3_buckets": [
+    {
+      "name": "customer-pii-exports",
+      "sensitivity": "high",
+      "description": "Nightly exports containing customer personal data (fictional)",
+      "public_access_block": {
+        "block_public_acls": true,
+        "ignore_public_acls": true,
+        "block_public_policy": true,
+        "restrict_public_buckets": true
+      },
+      "encryption": "aws:kms",
+      "tags": {
+        "DataClassification": "pii"
+      }
+    }
+  ],
+  "lambda_functions": []
+}

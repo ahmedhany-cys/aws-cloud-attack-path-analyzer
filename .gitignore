@@ -1,0 +1,60 @@
+# --- Secrets and local credentials (never commit) ---
+.env
+.env.*
+*.pem
+*.key
+*.p12
+*.pfx
+credentials
+credentials.*
+.aws/
+aws_credentials*
+*secret*.json
+*.tfstate
+*.tfstate.*
+.terraform/
+.secrets.baseline.local
+
+# --- Real-account scan output (local only) ---
+scans/
+*-snapshot.json
+*.snapshot.json
+reports/*
+!reports/README.md
+!reports/sample/
+!reports/sample/**
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+*.egg
+.eggs/
+build/
+dist/
+.venv/
+venv/
+env/
+pip-wheel-metadata/
+.python-version
+
+# --- Tooling caches ---
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.hypothesis/
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+bandit-report.*
+pip-audit-report.*
+
+# --- Editors and OS ---
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db

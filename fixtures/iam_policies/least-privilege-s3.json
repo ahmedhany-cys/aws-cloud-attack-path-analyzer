@@ -1,0 +1,24 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "ReadInputPrefix",
+      "Effect": "Allow",
+      "Action": ["s3:GetObject"],
+      "Resource": "arn:aws:s3:::thumbnail-input/incoming/*"
+    },
+    {
+      "Sid": "ListInputPrefix",
+      "Effect": "Allow",
+      "Action": ["s3:ListBucket"],
+      "Resource": "arn:aws:s3:::thumbnail-input",
+      "Condition": {"StringLike": {"s3:prefix": ["incoming/*"]}}
+    },
+    {
+      "Sid": "WriteOutput",
+      "Effect": "Allow",
+      "Action": ["s3:PutObject"],
+      "Resource": "arn:aws:s3:::thumbnail-output/*"
+    }
+  ]
+}

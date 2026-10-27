@@ -1,0 +1,86 @@
+{
+  "schema_version": "1.0",
+  "metadata": {
+    "name": "scenario 05-public-bucket",
+    "description": "Public bucket policies: effective, mitigated by Block Public Access, and intentionally public low-sensitivity data.",
+    "synthetic": true,
+    "source": "fixture",
+    "generator": "scripts/build_scenarios.py from fixtures/sample_environment.json"
+  },
+  "account_id": "111111111111",
+  "coverage": {
+    "services": {
+      "iam": "complete",
+      "s3": "complete",
+      "lambda": "complete"
+    }
+  },
+  "external_principals": [],
+  "managed_policies": [],
+  "groups": [],
+  "users": [],
+  "roles": [],
+  "s3_buckets": [
+    {
+      "name": "legacy-backups",
+      "sensitivity": "high",
+      "description": "Old database backups left publicly readable",
+      "bucket_policy": {
+        "Version": "2012-10-17",
+        "Statement": [
+          {
+            "Sid": "PublicRead",
+            "Effect": "Allow",
+            "Principal": "*",
+            "Action": "s3:GetObject",
+            "Resource": "arn:aws:s3:::legacy-backups/*"
+          }
+        ]
+      },
+      "tags": {
+        "DataClassification": "confidential"
+      }
+    },
+    {
+      "name": "archive-with-restricted-policy",
+      "sensitivity": "medium",
+      "description": "Public statement still present, but Block Public Access restricts it",
+      "bucket_policy": {
+        "Version": "2012-10-17",
+        "Statement": [
+          {
+            "Sid": "LegacyPublicRead",
+            "Effect": "Allow",
+            "Principal": "*",
+            "Action": "s3:GetObject",
+            "Resource": "arn:aws:s3:::archive-with-restricted-policy/*"
+          }
+        ]
+      },
+      "public_access_block": {
+        "block_public_acls": true,
+        "ignore_public_acls": true,
+        "block_public_policy": true,
+        "restrict_public_buckets": true
+      }
+    },
+    {
+      "name": "public-marketing-assets",
+      "sensitivity": "low",
+      "description": "Intentionally public static assets",
+      "bucket_policy": {
+        "Version": "2012-10-17",
+        "Statement": [
+          {
+            "Sid": "PublicRead",
+            "Effect": "Allow",
+            "Principal": "*",
+            "Action": "s3:GetObject",
+            "Resource": "arn:aws:s3:::public-marketing-assets/*"
+          }
+        ]
+      }
+    }
+  ],
+  "lambda_functions": []
+}

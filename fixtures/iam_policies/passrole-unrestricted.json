@@ -1,0 +1,17 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "DeployFunctions",
+      "Effect": "Allow",
+      "Action": ["lambda:CreateFunction", "lambda:UpdateFunctionCode", "lambda:InvokeFunction"],
+      "Resource": "*"
+    },
+    {
+      "Sid": "PassAnyRole",
+      "Effect": "Allow",
+      "Action": "iam:PassRole",
+      "Resource": "*"
+    }
+  ]
+}

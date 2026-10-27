@@ -1,0 +1,326 @@
+{
+  "schema_version": "1.0",
+  "metadata": {
+    "name": "synthetic-demo-account",
+    "description": "Fictional AWS account used to demonstrate the analyzer. Every identity, account id, bucket and function is synthetic.",
+    "synthetic": true,
+    "source": "fixture",
+    "generated_at": "2026-10-27T00:00:00Z",
+    "generator": "hand-written fixture",
+    "regions": ["us-east-1"]
+  },
+  "account_id": "111111111111",
+  "coverage": {
+    "services": {
+      "iam": "complete",
+      "s3": "complete",
+      "lambda": {
+        "status": "partial",
+        "notes": ["region eu-west-1 was not inventoried: AccessDenied on lambda:ListFunctions"]
+      }
+    },
+    "notes": ["Synthetic coverage data: the gap is deliberate to demonstrate coverage warnings."]
+  },
+  "external_principals": [
+    {"arn": "arn:aws:iam::222222222222:root", "description": "Partner analytics provider (fictional)", "known": true}
+  ],
+  "managed_policies": [
+    {
+      "arn": "arn:aws:iam::aws:policy/AdministratorAccess",
+      "name": "AdministratorAccess",
+      "is_aws_managed": true,
+      "document": {"Version": "2012-10-17", "Statement": [{"Effect": "Allow", "Action": "*", "Resource": "*"}]}
+    },
+    {
+      "arn": "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole",
+      "name": "AWSLambdaBasicExecutionRole",
+      "is_aws_managed": true,
+      "document": {
+        "Version": "2012-10-17",
+        "Statement": [{"Effect": "Allow", "Action": ["logs:CreateLogGroup", "logs:CreateLogStream", "logs:PutLogEvents"], "Resource": "*"}]
+      }
+    },
+    {
+      "arn": "arn:aws:iam::aws:policy/AmazonS3FullAccess",
+      "name": "AmazonS3FullAccess",
+      "is_aws_managed": true,
+      "document": {"Version": "2012-10-17", "Statement": [{"Effect": "Allow", "Action": ["s3:*", "s3-object-lambda:*"], "Resource": "*"}]}
+    },
+    {
+      "arn": "arn:aws:iam::111111111111:policy/analyst-read-only",
+      "name": "analyst-read-only",
+      "is_aws_managed": false,
+      "document": {
+        "Version": "2012-10-17",
+        "Statement": [{"Sid": "ReadAnyBucket", "Effect": "Allow", "Action": ["s3:GetObject", "s3:ListBucket", "s3:GetBucketLocation"], "Resource": "*"}]
+      }
+    }
+  ],
+  "groups": [
+    {"name": "data-analysts", "attached_policies": ["arn:aws:iam::111111111111:policy/analyst-read-only"]}
+  ],
+  "users": [
+    {
+      "name": "break-glass-admin",
+      "attached_policies": ["arn:aws:iam::aws:policy/AdministratorAccess"],
+      "mfa_enabled": true,
+      "console_access": true,
+      "tags": {"purpose": "break-glass"}
+    },
+    {
+      "name": "ci-deployer",
+      "console_access": false,
+      "mfa_enabled": false,
+      "access_keys": [{"key_id": "SYNTHETIC-KEY-ID-0001", "status": "Active", "created": "2025-01-10T09:00:00Z"}],
+      "inline_policies": {
+        "deploy": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {"Sid": "PassAnyRole", "Effect": "Allow", "Action": "iam:PassRole", "Resource": "*"},
+            {"Sid": "ManageFunctions", "Effect": "Allow", "Action": ["lambda:CreateFunction", "lambda:UpdateFunctionCode", "lambda:UpdateFunctionConfiguration", "lambda:InvokeFunction", "lambda:GetFunction"], "Resource": "*"},
+            {"Sid": "UploadArtifacts", "Effect": "Allow", "Action": "s3:PutObject", "Resource": "arn:aws:s3:::build-artifacts/*"}
+          ]
+        }
+      }
+    },
+    {
+      "name": "helpdesk-operator",
+      "console_access": true,
+      "mfa_enabled": false,
+      "inline_policies": {
+        "helpdesk": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {"Sid": "ManageUserCredentials", "Effect": "Allow", "Action": ["iam:CreateAccessKey", "iam:UpdateAccessKey", "iam:CreateLoginProfile", "iam:UpdateLoginProfile"], "Resource": "arn:aws:iam::111111111111:user/*"},
+            {"Sid": "ReadUsers", "Effect": "Allow", "Action": ["iam:ListUsers", "iam:GetUser"], "Resource": "*"}
+          ]
+        }
+      }
+    },
+    {
+      "name": "analyst-readonly",
+      "groups": ["data-analysts"],
+      "console_access": true,
+      "mfa_enabled": true,
+      "inline_policies": {
+        "deny-sensitive": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {"Sid": "DenyPiiBucket", "Effect": "Deny", "Action": ["s3:GetObject", "s3:ListBucket"], "Resource": ["arn:aws:s3:::customer-pii-exports", "arn:aws:s3:::customer-pii-exports/*"]},
+            {"Sid": "DenyDestructive", "Effect": "Deny", "Action": ["s3:DeleteObject", "s3:PutBucketPolicy"], "Resource": "*"}
+          ]
+        }
+      }
+    },
+    {
+      "name": "legacy-automation",
+      "console_access": false,
+      "mfa_enabled": false,
+      "access_keys": [{"key_id": "SYNTHETIC-KEY-ID-0002", "status": "Active", "created": "2022-06-01T00:00:00Z"}],
+      "inline_policies": {
+        "legacy": {
+          "Version": "2012-10-17",
+          "Statement": [{"Sid": "AssumeAnything", "Effect": "Allow", "Action": "sts:AssumeRole", "Resource": "*"}]
+        }
+      }
+    }
+  ],
+  "roles": [
+    {
+      "name": "ops-admin-legacy",
+      "description": "Legacy operations role with unrestricted permissions",
+      "trust_policy": {
+        "Version": "2012-10-17",
+        "Statement": [
+          {"Effect": "Allow", "Principal": {"AWS": "arn:aws:iam::111111111111:root"}, "Action": "sts:AssumeRole"},
+          {"Effect": "Allow", "Principal": {"Service": "ec2.amazonaws.com"}, "Action": "sts:AssumeRole"}
+        ]
+      },
+      "inline_policies": {
+        "all": {"Version": "2012-10-17", "Statement": [{"Effect": "Allow", "Action": "*", "Resource": "*"}]}
+      }
+    },
+    {
+      "name": "partner-integration",
+      "description": "Lets the partner account pull finance reports",
+      "trust_policy": {
+        "Version": "2012-10-17",
+        "Statement": [{"Effect": "Allow", "Principal": {"AWS": "arn:aws:iam::222222222222:root"}, "Action": "sts:AssumeRole"}]
+      },
+      "inline_policies": {
+        "read-reports": {
+          "Version": "2012-10-17",
+          "Statement": [{"Effect": "Allow", "Action": ["s3:GetObject", "s3:ListBucket"], "Resource": ["arn:aws:s3:::finance-reports", "arn:aws:s3:::finance-reports/*"]}]
+        }
+      }
+    },
+    {
+      "name": "third-party-monitoring",
+      "description": "Vendor monitoring integration with an external id",
+      "trust_policy": {
+        "Version": "2012-10-17",
+        "Statement": [{"Effect": "Allow", "Principal": {"AWS": "arn:aws:iam::333333333333:root"}, "Action": "sts:AssumeRole", "Condition": {"StringEquals": {"sts:ExternalId": "synthetic-external-id-0000"}}}]
+      },
+      "inline_policies": {
+        "read-metrics": {
+          "Version": "2012-10-17",
+          "Statement": [{"Effect": "Allow", "Action": ["cloudwatch:GetMetricData", "cloudwatch:ListMetrics"], "Resource": "*"}]
+        }
+      }
+    },
+    {
+      "name": "vendor-support-access",
+      "description": "Support role whose trust policy was never scoped",
+      "trust_policy": {
+        "Version": "2012-10-17",
+        "Statement": [{"Effect": "Allow", "Principal": {"AWS": "*"}, "Action": "sts:AssumeRole"}]
+      },
+      "attached_policies": ["arn:aws:iam::aws:policy/AmazonS3FullAccess"]
+    },
+    {
+      "name": "lambda-image-resizer",
+      "description": "Execution role for the image resizer function",
+      "trust_policy": {
+        "Version": "2012-10-17",
+        "Statement": [{"Effect": "Allow", "Principal": {"Service": "lambda.amazonaws.com"}, "Action": "sts:AssumeRole"}]
+      },
+      "attached_policies": ["arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole", "arn:aws:iam::aws:policy/AmazonS3FullAccess"]
+    },
+    {
+      "name": "lambda-thumbnailer-least-priv",
+      "description": "Execution role scoped to the thumbnail buckets",
+      "trust_policy": {
+        "Version": "2012-10-17",
+        "Statement": [{"Effect": "Allow", "Principal": {"Service": "lambda.amazonaws.com"}, "Action": "sts:AssumeRole"}]
+      },
+      "attached_policies": ["arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"],
+      "inline_policies": {
+        "thumbnails": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {"Sid": "ReadInput", "Effect": "Allow", "Action": "s3:GetObject", "Resource": "arn:aws:s3:::thumbnail-input/*"},
+            {"Sid": "WriteOutput", "Effect": "Allow", "Action": "s3:PutObject", "Resource": "arn:aws:s3:::thumbnail-output/*"}
+          ]
+        }
+      }
+    },
+    {
+      "name": "finance-reporting",
+      "description": "Reads exports only through the finance VPC endpoint",
+      "trust_policy": {
+        "Version": "2012-10-17",
+        "Statement": [{"Effect": "Allow", "Principal": {"AWS": "arn:aws:iam::111111111111:root"}, "Action": "sts:AssumeRole"}]
+      },
+      "inline_policies": {
+        "vpce-only": {
+          "Version": "2012-10-17",
+          "Statement": [{"Sid": "ReadExportsViaEndpoint", "Effect": "Allow", "Action": "s3:GetObject", "Resource": "arn:aws:s3:::customer-pii-exports/*", "Condition": {"StringEquals": {"aws:SourceVpce": "vpce-0f1e2d3c4b5a69788"}}}]
+        }
+      }
+    },
+    {
+      "name": "data-pipeline-worker",
+      "description": "Pipeline role whose managed policy was not exported",
+      "trust_policy": {
+        "Version": "2012-10-17",
+        "Statement": [{"Effect": "Allow", "Principal": {"AWS": "arn:aws:iam::111111111111:root"}, "Action": "sts:AssumeRole"}]
+      },
+      "attached_policies": ["arn:aws:iam::111111111111:policy/pipeline-unresolved"],
+      "inline_policies": {
+        "queue": {
+          "Version": "2012-10-17",
+          "Statement": [{"Effect": "Allow", "Action": ["sqs:ReceiveMessage", "sqs:DeleteMessage"], "Resource": "arn:aws:sqs:us-east-1:111111111111:pipeline-queue"}]
+        }
+      }
+    },
+    {
+      "name": "ec2-web-instance",
+      "description": "Instance profile role for the marketing site",
+      "trust_policy": {
+        "Version": "2012-10-17",
+        "Statement": [{"Effect": "Allow", "Principal": {"Service": "ec2.amazonaws.com"}, "Action": "sts:AssumeRole"}]
+      },
+      "inline_policies": {
+        "assets": {
+          "Version": "2012-10-17",
+          "Statement": [{"Effect": "Allow", "Action": "s3:GetObject", "Resource": "arn:aws:s3:::public-marketing-assets/*"}]
+        }
+      }
+    }
+  ],
+  "s3_buckets": [
+    {
+      "name": "customer-pii-exports",
+      "sensitivity": "high",
+      "description": "Nightly exports containing customer personal data (fictional)",
+      "public_access_block": {"block_public_acls": true, "ignore_public_acls": true, "block_public_policy": true, "restrict_public_buckets": true},
+      "encryption": "aws:kms",
+      "tags": {"DataClassification": "pii"}
+    },
+    {
+      "name": "legacy-backups",
+      "sensitivity": "high",
+      "description": "Old database backups left publicly readable",
+      "bucket_policy": {
+        "Version": "2012-10-17",
+        "Statement": [{"Sid": "PublicRead", "Effect": "Allow", "Principal": "*", "Action": "s3:GetObject", "Resource": "arn:aws:s3:::legacy-backups/*"}]
+      },
+      "tags": {"DataClassification": "confidential"}
+    },
+    {
+      "name": "archive-with-restricted-policy",
+      "sensitivity": "medium",
+      "description": "Public statement still present, but Block Public Access restricts it",
+      "bucket_policy": {
+        "Version": "2012-10-17",
+        "Statement": [{"Sid": "LegacyPublicRead", "Effect": "Allow", "Principal": "*", "Action": "s3:GetObject", "Resource": "arn:aws:s3:::archive-with-restricted-policy/*"}]
+      },
+      "public_access_block": {"block_public_acls": true, "ignore_public_acls": true, "block_public_policy": true, "restrict_public_buckets": true}
+    },
+    {
+      "name": "public-marketing-assets",
+      "sensitivity": "low",
+      "description": "Intentionally public static assets",
+      "bucket_policy": {
+        "Version": "2012-10-17",
+        "Statement": [{"Sid": "PublicRead", "Effect": "Allow", "Principal": "*", "Action": "s3:GetObject", "Resource": "arn:aws:s3:::public-marketing-assets/*"}]
+      }
+    },
+    {
+      "name": "finance-reports",
+      "sensitivity": "medium",
+      "description": "Monthly finance reports shared with the partner",
+      "public_access_block": {"block_public_acls": true, "ignore_public_acls": true, "block_public_policy": true, "restrict_public_buckets": true}
+    },
+    {
+      "name": "build-artifacts",
+      "sensitivity": "low",
+      "public_access_block": {"block_public_acls": true, "ignore_public_acls": true, "block_public_policy": true, "restrict_public_buckets": true}
+    },
+    {
+      "name": "thumbnail-input",
+      "sensitivity": "low",
+      "public_access_block": {"block_public_acls": true, "ignore_public_acls": true, "block_public_policy": true, "restrict_public_buckets": true}
+    },
+    {
+      "name": "thumbnail-output",
+      "sensitivity": "low",
+      "public_access_block": {"block_public_acls": true, "ignore_public_acls": true, "block_public_policy": true, "restrict_public_buckets": true}
+    }
+  ],
+  "lambda_functions": [
+    {"name": "image-resizer", "region": "us-east-1", "runtime": "python3.12", "role_arn": "arn:aws:iam::111111111111:role/lambda-image-resizer"},
+    {"name": "thumbnailer", "region": "us-east-1", "runtime": "python3.12", "role_arn": "arn:aws:iam::111111111111:role/lambda-thumbnailer-least-priv"},
+    {
+      "name": "public-webhook",
+      "region": "us-east-1",
+      "runtime": "python3.12",
+      "role_arn": "arn:aws:iam::111111111111:role/lambda-image-resizer",
+      "resource_policy": {
+        "Version": "2012-10-17",
+        "Statement": [{"Sid": "AnyoneCanInvoke", "Effect": "Allow", "Principal": "*", "Action": "lambda:InvokeFunction", "Resource": "arn:aws:lambda:us-east-1:111111111111:function:public-webhook"}]
+      }
+    },
+    {"name": "orphan-cleanup", "region": "us-east-1", "runtime": "python3.12", "role_arn": "arn:aws:iam::111111111111:role/cleanup-role-missing"}
+  ]
+}

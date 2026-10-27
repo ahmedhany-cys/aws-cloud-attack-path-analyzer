@@ -1,0 +1,75 @@
+{
+  "schema_version": "1.0",
+  "metadata": {
+    "name": "scenario 09-incomplete-inventory",
+    "description": "Unresolved managed policy, missing execution role and partial Lambda coverage produce coverage warnings.",
+    "synthetic": true,
+    "source": "fixture",
+    "generator": "scripts/build_scenarios.py from fixtures/sample_environment.json"
+  },
+  "account_id": "111111111111",
+  "coverage": {
+    "services": {
+      "iam": "complete",
+      "s3": "complete",
+      "lambda": {
+        "status": "partial",
+        "notes": [
+          "region eu-west-1 was not inventoried: AccessDenied on lambda:ListFunctions"
+        ]
+      }
+    },
+    "notes": [
+      "Synthetic coverage data: the gap is deliberate to demonstrate coverage warnings."
+    ]
+  },
+  "external_principals": [],
+  "managed_policies": [],
+  "groups": [],
+  "users": [],
+  "roles": [
+    {
+      "name": "data-pipeline-worker",
+      "description": "Pipeline role whose managed policy was not exported",
+      "trust_policy": {
+        "Version": "2012-10-17",
+        "Statement": [
+          {
+            "Effect": "Allow",
+            "Principal": {
+              "AWS": "arn:aws:iam::111111111111:root"
+            },
+            "Action": "sts:AssumeRole"
+          }
+        ]
+      },
+      "attached_policies": [
+        "arn:aws:iam::111111111111:policy/pipeline-unresolved"
+      ],
+      "inline_policies": {
+        "queue": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Action": [
+                "sqs:ReceiveMessage",
+                "sqs:DeleteMessage"
+              ],
+              "Resource": "arn:aws:sqs:us-east-1:111111111111:pipeline-queue"
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "s3_buckets": [],
+  "lambda_functions": [
+    {
+      "name": "orphan-cleanup",
+      "region": "us-east-1",
+      "runtime": "python3.12",
+      "role_arn": "arn:aws:iam::111111111111:role/cleanup-role-missing"
+    }
+  ]
+}

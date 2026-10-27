@@ -1,0 +1,119 @@
+{
+  "description": "Expected outcomes for the bundled synthetic scenarios. Used by `attackpath validate` and the regression test suite. Every fixture is synthetic; see docs/incident-scenarios.md for the narrative behind each one.",
+  "scenarios": [
+    {
+      "name": "01-overly-broad-role",
+      "fixture": "01-overly-broad-role.json",
+      "description": "A role with Action * on Resource * is reported as administrative.",
+      "expect": [
+        {"present": true, "check_id": "ADMIN", "principal_contains": "role/ops-admin-legacy", "min_severity": "high", "evidence_kind": "observed"},
+        {"present": false, "check_id": "WILDCARD", "principal_contains": "role/ops-admin-legacy", "note": "administrative access already implies the wildcard grant"}
+      ]
+    },
+    {
+      "name": "02-risky-trust",
+      "fixture": "02-risky-trust.json",
+      "description": "Anonymous trust, cross-account trust without ExternalId, and cross-account trust with ExternalId.",
+      "expect": [
+        {"present": true, "check_id": "TRUST-ANONYMOUS", "principal_contains": "role/vendor-support-access", "min_severity": "critical", "evidence_kind": "observed"},
+        {"present": true, "check_id": "TRUST-CROSS-ACCOUNT", "principal_contains": "role/partner-integration", "tag": "missing-external-id"},
+        {"present": true, "check_id": "TRUST-CROSS-ACCOUNT", "principal_contains": "role/third-party-monitoring", "tag": "external-id-required", "max_severity": "medium"},
+        {"present": true, "check_id": "PATH-SENSITIVE", "resource_contains": "customer-pii-exports", "min_severity": "high", "note": "any AWS principal -> vendor-support-access -> PII bucket"},
+        {"present": true, "check_id": "EVAL-INDETERMINATE", "resource_contains": "third-party-monitoring", "note": "the sts:ExternalId condition value is request-time context"}
+      ]
+    },
+    {
+      "name": "03-passrole-broad",
+      "fixture": "03-passrole-broad.json",
+      "description": "A deployment user holds iam:PassRole on * together with Lambda write permissions.",
+      "expect": [
+        {"present": true, "check_id": "PASSROLE-BROAD", "principal_contains": "user/ci-deployer", "min_severity": "high", "evidence_kind": "observed"},
+        {"present": true, "check_id": "LAMBDA-WRITE", "principal_contains": "user/ci-deployer", "min_severity": "medium"},
+        {"present": false, "check_id": "ADMIN", "principal_contains": "user/ci-deployer"}
+      ]
+    },
+    {
+      "name": "04-workload-s3-access",
+      "fixture": "04-workload-s3-access.json",
+      "description": "A function's execution role has S3 full access and therefore reaches a high-sensitivity bucket.",
+      "expect": [
+        {"present": true, "check_id": "SENSITIVE-ACCESS", "principal_contains": "role/lambda-image-resizer", "resource_contains": "customer-pii-exports", "tag": "workload", "min_severity": "high"},
+        {"present": true, "check_id": "WILDCARD", "principal_contains": "role/lambda-image-resizer"},
+        {"present": false, "check_id": "PATH-SENSITIVE", "note": "function -> own role -> bucket is the same fact as the workload finding"}
+      ]
+    },
+    {
+      "name": "05-public-bucket",
+      "fixture": "05-public-bucket.json",
+      "description": "Public bucket policies: effective, mitigated by Block Public Access, and intentionally public low-sensitivity data.",
+      "expect": [
+        {"present": true, "check_id": "S3-PUBLIC-POLICY", "resource_contains": "legacy-backups", "min_severity": "high", "evidence_kind": "observed"},
+        {"present": true, "check_id": "S3-PUBLIC-POLICY", "resource_contains": "archive-with-restricted-policy", "tag": "mitigated-by-block-public-access", "max_severity": "low"},
+        {"present": true, "check_id": "S3-PUBLIC-POLICY", "resource_contains": "public-marketing-assets", "max_severity": "medium"}
+      ]
+    },
+    {
+      "name": "06-explicit-deny",
+      "fixture": "06-explicit-deny.json",
+      "description": "A group grants s3:GetObject on * but an inline Deny blocks the PII bucket; the deny must win.",
+      "expect": [
+        {"present": false, "check_id": "SENSITIVE-ACCESS", "principal_contains": "user/analyst-readonly", "resource_contains": "customer-pii-exports", "note": "explicit Deny on the PII bucket"},
+        {"present": true, "check_id": "SENSITIVE-ACCESS", "principal_contains": "user/analyst-readonly", "resource_contains": "finance-reports", "max_severity": "medium"},
+        {"present": false, "check_id": "*", "min_severity": "high"}
+      ]
+    },
+    {
+      "name": "07-unknown-condition",
+      "fixture": "07-unknown-condition.json",
+      "description": "An Allow guarded by aws:SourceVpce cannot be decided offline and is reported as indeterminate.",
+      "expect": [
+        {"present": true, "check_id": "SENSITIVE-ACCESS", "principal_contains": "role/finance-reporting", "resource_contains": "customer-pii-exports", "evidence_kind": "indeterminate", "max_severity": "medium"},
+        {"present": true, "check_id": "EVAL-INDETERMINATE", "resource_contains": "role/finance-reporting"},
+        {"present": false, "check_id": "SENSITIVE-ACCESS", "principal_contains": "role/finance-reporting", "evidence_kind": "observed"}
+      ]
+    },
+    {
+      "name": "08-safe-configuration",
+      "fixture": "08-safe-configuration.json",
+      "description": "A least-privilege execution role scoped to its two buckets produces no high-severity finding.",
+      "expect": [
+        {"present": false, "check_id": "*", "min_severity": "medium"},
+        {"present": false, "check_id": "SENSITIVE-ACCESS"},
+        {"present": false, "check_id": "WILDCARD"},
+        {"present": false, "check_id": "ADMIN"},
+        {"present": false, "check_id": "COVERAGE-PARTIAL"}
+      ]
+    },
+    {
+      "name": "09-incomplete-inventory",
+      "fixture": "09-incomplete-inventory.json",
+      "description": "Unresolved managed policy, missing execution role and partial Lambda coverage produce coverage warnings.",
+      "expect": [
+        {"present": true, "check_id": "COVERAGE-PARTIAL", "resource_contains": "lambda"},
+        {"present": true, "check_id": "COVERAGE-UNRESOLVED-POLICY", "resource_contains": "pipeline-unresolved"},
+        {"present": true, "check_id": "COVERAGE-UNRESOLVED-ROLE", "resource_contains": "cleanup-role-missing"},
+        {"present": false, "check_id": "ADMIN", "principal_contains": "role/data-pipeline-worker", "note": "a missing document alone must not produce a privilege finding"}
+      ]
+    },
+    {
+      "name": "10-remediation-before",
+      "fixture": "10-remediation-before.json",
+      "description": "A user with sts:AssumeRole on * reaches an administrative role trusted by the whole account.",
+      "expect": [
+        {"present": true, "check_id": "PATH-ADMIN", "principal_contains": "user/legacy-automation", "resource_contains": "role/ops-admin-legacy", "min_severity": "critical", "evidence_kind": "observed"},
+        {"present": true, "check_id": "ASSUME-BROAD", "principal_contains": "user/legacy-automation", "min_severity": "high"}
+      ]
+    },
+    {
+      "name": "10-remediation-after",
+      "fixture": "10-remediation-after.json",
+      "description": "The same environment after scoping sts:AssumeRole and narrowing the trust policy: the path is gone.",
+      "expect": [
+        {"present": false, "check_id": "PATH-ADMIN", "principal_contains": "user/legacy-automation"},
+        {"present": false, "check_id": "ASSUME-BROAD", "principal_contains": "user/legacy-automation"},
+        {"present": true, "check_id": "ADMIN", "principal_contains": "role/ops-admin-legacy", "note": "the role itself is still administrative; only the path to it was removed"},
+        {"present": false, "check_id": "PATH-ADMIN"}
+      ]
+    }
+  ]
+}

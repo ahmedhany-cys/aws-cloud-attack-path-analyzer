@@ -71,7 +71,11 @@ def generate(principals: int, seed: int = 7) -> dict[str, Any]:
             policy = {
                 "Version": "2012-10-17",
                 "Statement": [
-                    {"Effect": "Allow", "Action": "s3:GetObject", "Resource": f"arn:aws:s3:::{target}/*"},
+                    {
+                        "Effect": "Allow",
+                        "Action": "s3:GetObject",
+                        "Resource": f"arn:aws:s3:::{target}/*",
+                    },
                     {"Effect": "Allow", "Action": "logs:PutLogEvents", "Resource": "*"},
                 ],
             }
@@ -96,32 +100,55 @@ def generate(principals: int, seed: int = 7) -> dict[str, Any]:
             }
             trust_principal = {"AWS": f"arn:aws:iam::{ACCOUNT}:root"}
         else:
-            policy = {"Version": "2012-10-17", "Statement": [{"Effect": "Allow", "Action": "*", "Resource": "*"}]}
+            policy = {
+                "Version": "2012-10-17",
+                "Statement": [{"Effect": "Allow", "Action": "*", "Resource": "*"}],
+            }
             trust_principal = {"AWS": f"arn:aws:iam::{ACCOUNT}:root"}
         roles.append(
             {
                 "name": f"role-{i:05d}",
                 "trust_policy": {
                     "Version": "2012-10-17",
-                    "Statement": [{"Effect": "Allow", "Principal": trust_principal, "Action": "sts:AssumeRole"}],
+                    "Statement": [
+                        {
+                            "Effect": "Allow",
+                            "Principal": trust_principal,
+                            "Action": "sts:AssumeRole",
+                        }
+                    ],
                 },
                 "inline_policies": {"p": policy},
             }
         )
         if trust_principal.get("Service") and rng.random() < 0.5:
-            functions.append({"name": f"fn-{i:05d}", "role_arn": f"arn:aws:iam::{ACCOUNT}:role/role-{i:05d}"})
+            functions.append(
+                {"name": f"fn-{i:05d}", "role_arn": f"arn:aws:iam::{ACCOUNT}:role/role-{i:05d}"}
+            )
 
     for i in range(user_count):
         kind = rng.random()
         if kind < 0.6:
             policy = {
                 "Version": "2012-10-17",
-                "Statement": [{"Effect": "Allow", "Action": ["s3:GetObject", "s3:ListBucket"], "Resource": f"arn:aws:s3:::bucket-{rng.randrange(bucket_count):05d}*"}],
+                "Statement": [
+                    {
+                        "Effect": "Allow",
+                        "Action": ["s3:GetObject", "s3:ListBucket"],
+                        "Resource": f"arn:aws:s3:::bucket-{rng.randrange(bucket_count):05d}*",
+                    }
+                ],
             }
         elif kind < 0.85:
             policy = {
                 "Version": "2012-10-17",
-                "Statement": [{"Effect": "Allow", "Action": "sts:AssumeRole", "Resource": f"arn:aws:iam::{ACCOUNT}:role/role-{rng.randrange(role_count):05d}"}],
+                "Statement": [
+                    {
+                        "Effect": "Allow",
+                        "Action": "sts:AssumeRole",
+                        "Resource": f"arn:aws:iam::{ACCOUNT}:role/role-{rng.randrange(role_count):05d}",
+                    }
+                ],
             }
         elif kind < 0.95:
             policy = {
@@ -129,12 +156,17 @@ def generate(principals: int, seed: int = 7) -> dict[str, Any]:
                 "Statement": [{"Effect": "Allow", "Action": "sts:AssumeRole", "Resource": "*"}],
             }
         else:
-            policy = {"Version": "2012-10-17", "Statement": [{"Effect": "Allow", "Action": "*", "Resource": "*"}]}
+            policy = {
+                "Version": "2012-10-17",
+                "Statement": [{"Effect": "Allow", "Action": "*", "Resource": "*"}],
+            }
         users.append(
             {
                 "name": f"user-{i:05d}",
                 "inline_policies": {"p": policy},
-                "access_keys": [{"key_id": f"SYNTHETIC-KEY-{i:05d}", "status": "Active"}] if rng.random() < 0.5 else [],
+                "access_keys": [{"key_id": f"SYNTHETIC-KEY-{i:05d}", "status": "Active"}]
+                if rng.random() < 0.5
+                else [],
                 "mfa_enabled": rng.random() < 0.5,
                 "console_access": True,
             }
@@ -158,7 +190,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--repeat", type=int, default=3, help="runs per size (median reported)")
     args = parser.parse_args(argv)
     sizes = [int(s) for s in args.sizes.split(",") if s.strip()]
-    print(f"{'principals':>10} {'buckets':>8} {'edges':>8} {'paths':>7} {'findings':>9} {'median s':>9} {'max s':>7}")
+    print(
+        f"{'principals':>10} {'buckets':>8} {'edges':>8} {'paths':>7} {'findings':>9} {'median s':>9} {'max s':>7}"
+    )
     for size in sizes:
         env = parse_environment(generate(size), f"benchmark-{size}")
         timings: list[float] = []

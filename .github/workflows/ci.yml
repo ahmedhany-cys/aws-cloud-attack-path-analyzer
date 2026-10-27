@@ -128,12 +128,20 @@ jobs:
         run: |
           git ls-files -z | xargs -0 detect-secrets-hook --baseline .secrets.baseline
       - name: Gitleaks (secret scanning of the full history)
-        uses: gitleaks/gitleaks-action@ff98106e4c7b2bc287b24eaf42907196329070c7 # v2
+        # A pinned release binary with checksum verification, scanning every commit on
+        # every run. The gitleaks GitHub Action derives a commit range from the push
+        # event, which has no valid base on a repository's first push.
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GITLEAKS_ENABLE_COMMENTS: "false"
-          GITLEAKS_ENABLE_UPLOAD_ARTIFACT: "false"
-          GITLEAKS_ENABLE_SUMMARY: "true"
+          GITLEAKS_VERSION: "8.24.3"
+        run: |
+          set -euo pipefail
+          base="https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}"
+          asset="gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          curl -sSL --retry 3 -o "${asset}" "${base}/${asset}"
+          curl -sSL --retry 3 -o checksums.txt "${base}/gitleaks_${GITLEAKS_VERSION}_checksums.txt"
+          grep " ${asset}$" checksums.txt | sha256sum -c -
+          mkdir -p /tmp/gitleaks && tar -xzf "${asset}" -C /tmp/gitleaks gitleaks
+          /tmp/gitleaks/gitleaks git --redact --no-banner --exit-code 1 .
 
   build:
     name: Build distribution

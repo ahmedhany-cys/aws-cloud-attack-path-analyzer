@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "aws-cloud-attack-path-analyzer"
-version = "0.1.0"
-description = "Graph-based IAM attack-path analysis for AWS environments: offline-first, read-only, evidence-driven."
+version = "0.2.0"
+description = "Graph-based IAM and network-exposure attack-path analysis for AWS environments: offline-first, read-only, evidence-driven."
 readme = "README.md"
 requires-python = ">=3.11"
 license = "MIT"

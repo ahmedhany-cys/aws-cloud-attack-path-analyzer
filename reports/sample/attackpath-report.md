@@ -11,9 +11,9 @@
 | Input | environment snapshot sample_environment.json |
 | Environment | synthetic-demo-account (synthetic) |
 | Account | `111111111111` |
-| Generated | 2026-10-27T19:20:23+00:00 |
-| Tool version | 0.1.0 |
-| Analysis time | 0.016 s |
+| Generated | 2026-10-28T06:12:03+00:00 |
+| Tool version | 0.2.0 |
+| Analysis time | 0.017 s |
 | Findings | 49 |
 
 ### Findings by severity

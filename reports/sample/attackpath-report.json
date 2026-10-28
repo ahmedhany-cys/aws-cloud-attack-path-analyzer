@@ -3,9 +3,9 @@
     "This report was generated from a synthetic fixture. The identities, accounts and resources are fictional; nothing in it describes a real AWS account.",
     "Scores and severities are prioritization heuristics derived from configuration, not proof that an action succeeds in a live account. Findings marked hypothetical or indeterminate depend on context the snapshot does not contain."
   ],
-  "tool_version": "0.1.0",
+  "tool_version": "0.2.0",
   "schema_version": "1.0",
-  "generated_at": "2026-10-27T19:20:23+00:00",
+  "generated_at": "2026-10-28T06:12:03+00:00",
   "input_description": "environment snapshot sample_environment.json",
   "account_id": "111111111111",
   "environment_name": "synthetic-demo-account",
@@ -6248,7 +6248,7 @@
       }
     }
   },
-  "analysis_seconds": 0.016,
+  "analysis_seconds": 0.0174,
   "summary": {
     "total_findings": 49,
     "by_severity": {

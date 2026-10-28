@@ -6,6 +6,8 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-10-28
+
 ### Added
 
 * Network exposure and multi-service paths: snapshots may now contain `security_groups` and
@@ -39,6 +41,10 @@ All notable changes to this project are documented here. The format follows
   scores moved accordingly.
 * Scans that do not request a service report it as `missing` in the coverage section, so an
   older `iam,s3,lambda` selection now yields an informational coverage finding for EC2.
+* README: records the read-only runs of the AWS adapter against a real account on 2026-10-27
+  (no results of real-account scans are published).
+* Dependency bounds: the `dashboard` extra accepts pandas 3 and the `dev` extra accepts mypy 2;
+  the pinned GitHub Actions moved to their current major versions.
 
 ### Fixed
 
@@ -53,11 +59,6 @@ All notable changes to this project are documented here. The format follows
 * `EVAL-INDETERMINATE` findings no longer truncate the statement label at the first colon when
   the statement has a `Sid`: the evaluator's limitation log now keeps the statement label and the
   reason as separate fields instead of a single string that the check had to split.
-
-### Changed
-
-* README: records the read-only runs of the AWS adapter against a real account on 2026-10-27
-  (no results of real-account scans are published).
 
 ## [0.1.0] - 2026-10-27
 
